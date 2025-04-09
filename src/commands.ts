@@ -125,7 +125,7 @@ export function handleCopyTitleUid(plugin: UIDGenerator, specificFile?: TFile): 
 
 
 /** Logic for Folder Context Menu Action */
-export async function handleCopytitlesAndUidsFromFolder(plugin: UIDGenerator, folder: TFolder): Promise<void> {
+export async function handleCopyTitlesAndUidsFromFolder(plugin: UIDGenerator, folder: TFolder): Promise<void> {
 	console.log(`[UIDGenerator] Copying titles+${plugin.settings.uidKey}s for folder: ${folder.path}`);
 	const markdownFiles = plugin.app.vault.getMarkdownFiles();
 	const filesInFolder: TFile[] = [];
@@ -176,7 +176,7 @@ export async function handleCopyTitleAndUidForFile(plugin: UIDGenerator, file: T
 }
 
 /** Logic for Context Menu: Copy titles+UIDs for multiple selected files */
-export async function handleCopytitlesAndUidsForMultipleFiles(plugin: UIDGenerator, files: TFile[]): Promise<void> {
+export async function handleCopyTitlesAndUidsForMultipleFiles(plugin: UIDGenerator, files: TFile[]): Promise<void> {
     if (!files || files.length === 0) {
         new Notice("No Markdown files found in selection.");
         return;
@@ -212,7 +212,7 @@ export async function handleCopytitlesAndUidsForMultipleFiles(plugin: UIDGenerat
 }
 
 /** Logic for Command Palette: Copy titles+UIDs for selected files in File Explorer */
-export async function handleCopytitlesAndUidsForSelection(plugin: UIDGenerator): Promise<void> {
+export async function handleCopyTitlesAndUidsForSelection(plugin: UIDGenerator): Promise<void> {
     // Find the active File Explorer leaf/view
     const fileExplorerLeaf = plugin.app.workspace.getLeavesOfType('file-explorer')
         .find(leaf => (leaf.view as any).selectedFiles && plugin.app.workspace.activeLeaf === leaf);
@@ -244,7 +244,7 @@ export async function handleCopytitlesAndUidsForSelection(plugin: UIDGenerator):
     }
 
     // Delegate to the same logic used by the context menu
-    await handleCopytitlesAndUidsForMultipleFiles(plugin, filesToProcess);
+    await handleCopyTitlesAndUidsForMultipleFiles(plugin, filesToProcess);
 }
 
 

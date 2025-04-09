@@ -113,7 +113,7 @@ export default class UIDGenerator extends Plugin {
 
                 if (canRun) {
                     if (!checking) {
-                        commands.handleCopytitlesAndUidsForSelection(this);
+                        commands.handleCopyTitlesAndUidsForSelection(this);
                     }
                     return true;
                 }
@@ -131,7 +131,7 @@ export default class UIDGenerator extends Plugin {
 					item
 						.setTitle(`Copy titles+${this.settings.uidKey}s from "${fileOrFolder.name}"`)
 						.setIcon('copy')
-						.onClick(() => commands.handleCopytitlesAndUidsFromFolder(this, fileOrFolder));
+						.onClick(() => commands.handleCopyTitlesAndUidsFromFolder(this, fileOrFolder));
 				});
 			} else if (fileOrFolder instanceof TFile && fileOrFolder.extension === 'md') {
                  menu.addItem((item) => {
@@ -155,7 +155,7 @@ export default class UIDGenerator extends Plugin {
                         .setTitle(`Copy titles+${this.settings.uidKey}s for ${markdownFiles.length} selected`)
                         .setIcon('copy')
                         // Pass the filtered array of TFiles to the handler
-                        .onClick(() => commands.handleCopytitlesAndUidsForMultipleFiles(this, markdownFiles));
+                        .onClick(() => commands.handleCopyTitlesAndUidsForMultipleFiles(this, markdownFiles));
                 });
             }
         }));

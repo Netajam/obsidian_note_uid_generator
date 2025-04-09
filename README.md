@@ -117,8 +117,8 @@ For developers interested in contributing:
 
 ## Contributing
 
-Contributions, issues, and feature requests are welcome! Please feel free to check the [issues page]([link-to-your-issues-page](https://github.com/Netajam/obsidian_note_uid_generator/issues)) or submit a pull request on the [GitHub repository]([link-to-your-repo](https://github.com/Netajam/obsidian_note_uid_generator)).
+Contributions, issues, and feature requests are welcome! Please feel free to check the [issues page](https://github.com/Netajam/obsidian_note_uid_generator/issues) or submit a pull request on the [GitHub repository](https://github.com/Netajam/obsidian_note_uid_generator).
 
 ## License
 
-This plugin is licensed under the MIT License. See the LICENSE file for details.
+This plugin is licensed under the OBSD License. See the LICENSE file for details.

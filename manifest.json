@@ -1,7 +1,7 @@
 {
 	"id": "note_uid_generator",
 	"name": "Note UID Generator",
-	"version": "1.0.0",
+	"version": "1.0.1",
 	"minAppVersion": "0.15.0",
 	"description": "Automatically or manually generates Unique IDs (UIDs) for notes and registers them in metadata (frontmatter).",
 	"author": "Valentin Pelletier",

@@ -331,3 +331,97 @@ export async function handleAutoGenerateUid(plugin: UIDGenerator, file: TFile | 
 	const newUid = uidUtils.generateUID();
 	await uidUtils.setUID(plugin, file, newUid, false);
 }
+export async function handleAddMissingUidsInScope(plugin: UIDGenerator): Promise<void> {
+	const allFiles = plugin.app.vault.getMarkdownFiles();
+	if (allFiles.length === 0) {
+		new Notice("No Markdown files found in the vault.");
+		return;
+	}
+
+	let addedCount = 0;
+	let skippedExistingCount = 0;
+    let skippedScopeCount = 0;
+	let errorCount = 0;
+    const totalFiles = allFiles.length;
+
+	const noticeMessage = `Processing ${totalFiles} files for missing UIDs...`;
+	const notice = new Notice(noticeMessage, 0); // Show notice indefinitely until updated/hidden
+
+	console.log(`[UIDGenerator] Starting bulk check for missing UIDs. Scope: ${plugin.settings.autoGenerationScope}.`);
+
+	try { // Wrap the loop for final notice update
+		for (let i = 0; i < totalFiles; i++) {
+			const file = allFiles[i];
+            const normalizedPath = normalizePath(file.path);
+
+            // Update progress notice periodically
+            if (i % 50 === 0 && i > 0) { // Update every 50 files
+                notice.setMessage(`${noticeMessage}\n(${i}/${totalFiles})`);
+            }
+
+			// --- Check Scope and Exclusions ---
+            let isInScope = true;
+            // 1. Check exclusions
+            if (plugin.settings.autoGenerationExclusions.some(ex => {
+                const normEx = normalizePath(ex.trim());
+                return normEx && (normalizedPath.startsWith(normEx + '/') || normalizedPath === normEx);
+            })) {
+                isInScope = false; // Excluded
+            }
+
+            // 2. Check scope if not already excluded
+            if (isInScope && plugin.settings.autoGenerationScope === 'folder') {
+                const normScope = normalizePath(plugin.settings.autoGenerationFolder.trim());
+                if (!normScope || !(normalizedPath.startsWith(normScope + '/') || file.parent?.path === normScope)) {
+                    isInScope = false; // Outside scope folder
+                }
+            }
+
+            if (!isInScope) {
+                skippedScopeCount++;
+                continue; // Skip this file
+            }
+            // --- End Scope Check ---
+
+
+			// --- Check if UID already exists ---
+			const existingUid = uidUtils.getUIDFromFile(plugin, file);
+			if (existingUid) {
+				skippedExistingCount++;
+				continue; // Skip this file
+			}
+
+			// --- Generate and Set UID ---
+			const newUid = uidUtils.generateUID();
+			try {
+				const success = await uidUtils.setUID(plugin, file, newUid, false); // Do not overwrite
+				if (success) {
+					addedCount++;
+				} else {
+                    // setUID internally handles Notice on error, just count it
+                    errorCount++;
+                }
+			} catch (err) {
+                // Catch any unexpected errors from setUID itself
+				console.error(`[UIDGenerator] Unexpected error setting UID for ${file.path}:`, err);
+				errorCount++;
+			}
+
+            // Optional: Yield to prevent freezing on very large vaults
+            if (i % 100 === 0 && i > 0) { // Yield every 100 files
+                 await new Promise(resolve => setTimeout(resolve, 0));
+            }
+		} // End for loop
+	} finally {
+        // --- Update/Hide Notice and Log Results ---
+        notice.hide(); // Hide the progress notice
+
+        let summary = `Bulk UID Generation Complete:\n- Added: ${addedCount}\n- Skipped (already had UID): ${skippedExistingCount}\n- Skipped (out of scope/excluded): ${skippedScopeCount}`;
+        if (errorCount > 0) {
+            summary += `\n- Errors: ${errorCount} (see console)`;
+        }
+
+        new Notice(summary, 10000 + errorCount * 100); // Show longer if errors
+        console.log(`[UIDGenerator] ${summary.replace(/\n- /g, ', ')}`);
+    }
+}

@@ -188,4 +188,7 @@ export default class UIDGenerator extends Plugin {
     async clearUIDsInFolder(folderPath: string): Promise<void> {
         await commands.handleClearUIDsInFolder(this, folderPath);
     }
+    async triggerAddMissingUidsInScope(): Promise<void> {
+        await commands.handleAddMissingUidsInScope(this);
+    }
 }

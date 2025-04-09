@@ -137,7 +137,27 @@ export class UIDSettingTab extends PluginSettingTab {
             exclusionListEl.style.listStyle = 'none'; // Or 'disc', 'circle' etc.
 
         } 
-
+        new Setting(containerEl)
+        .setName(`Generate missing ${this.plugin.settings.uidKey}s now`)
+        .setDesc(`Manually scan notes based on the current 'Generation Scope' and 'Excluded Folders' settings above. Add a ${this.plugin.settings.uidKey} to any applicable notes that don't already have one. This may take time for large vaults.`)
+        .addButton(button => button
+            .setButtonText("Generate Missing UIDs")
+            .setTooltip("Scan and add missing UIDs respecting scope/exclusions")
+            .onClick(async () => {
+                button.setDisabled(true); // Disable button during processing
+                button.setButtonText("Processing...");
+                try {
+                    await this.plugin.triggerAddMissingUidsInScope();
+                } catch (e) {
+                    // Catch potential errors from the trigger function itself
+                    console.error("[UIDGenerator] Error triggering bulk UID generation:", e);
+                    new Notice("Failed to start bulk generation. See console.", 5000);
+                } finally {
+                    // Re-enable button regardless of success/failure
+                    button.setDisabled(false);
+                    button.setButtonText("Generate Missing UIDs");
+                }
+            }));
 
         // --- Copy Format Settings ---
         containerEl.createEl('h3', { text: 'Copy Format' });

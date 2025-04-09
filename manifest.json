@@ -1,11 +1,11 @@
 {
-	"id": "sample-plugin",
-	"name": "Sample Plugin",
+	"id": "note_uid_generator",
+	"name": "Note UID Generator",
 	"version": "1.0.0",
 	"minAppVersion": "0.15.0",
-	"description": "Demonstrates some of the capabilities of the Obsidian API.",
-	"author": "Obsidian",
-	"authorUrl": "https://obsidian.md",
-	"fundingUrl": "https://obsidian.md/pricing",
+	"description": "Automatically or manually generates Unique IDs (UIDs) for notes and registers them in metadata (frontmatter).",
+	"author": "Valentin Pelletier",
+	"authorUrl": "https://github.com/Netajam",
+	"fundingUrl": "https://github.com/sponsors/Netajam",
 	"isDesktopOnly": false
 }

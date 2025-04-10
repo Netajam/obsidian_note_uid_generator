@@ -1,8 +1,63 @@
-/*
+/* Styles for UID Generator Plugin Settings */
 
-This CSS file will be included with your plugin, and
-available in the app when your plugin is enabled.
+/* Style the list of excluded folders in settings */
+.uid-generator-exclusion-list {
+    margin-top: 5px;
+    margin-bottom: 15px;
+    padding-left: 20px; /* Indent list slightly */
+    list-style: none; /* Remove default bullets */
+    max-height: 150px; /* Optional: Limit height */
+    overflow-y: auto; /* Optional: Allow scrolling */
+    background-color: var(--background-secondary); /* Optional: Subtle background */
+    border: 1px solid var(--background-modifier-border); /* Optional: Border */
+    border-radius: var(--radius-m); /* Optional: Rounded corners */
+    padding-top: 5px; /* Optional: Inner padding */
+    padding-bottom: 5px; /* Optional: Inner padding */
+}
 
-If your plugin does not need CSS, delete this file.
+.uid-generator-exclusion-list li {
+    padding: 2px 0; /* Optional: Spacing between list items */
+}
 
-*/
+/* You might also want the styles for the FolderExclusionModal here */
+.uid-folder-exclusion-modal .uid-search-input {
+    width: 95%;
+    margin-bottom: 10px;
+}
+
+.uid-folder-exclusion-modal .uid-suggestion-container {
+    max-height: 300px;
+    overflow-y: auto;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: var(--radius-m);
+    padding: 5px;
+}
+
+ .uid-folder-exclusion-modal .setting-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 5px 8px;
+    border-bottom: 1px solid var(--background-modifier-border);
+ }
+ .uid-folder-exclusion-modal .setting-item:last-child {
+    border-bottom: none;
+ }
+
+ .uid-folder-exclusion-modal .setting-item-info {
+    flex-grow: 1;
+    margin-right: 10px;
+    overflow: hidden; /* Prevent long paths breaking layout */
+    text-overflow: ellipsis; /* Show ... for long paths */
+    white-space: nowrap; /* Keep path on one line */
+ }
+ .uid-folder-exclusion-modal .setting-item-control button {
+    margin-left: auto;
+    flex-shrink: 0; /* Prevent button shrinking */
+ }
+
+.uid-no-results {
+    padding: 10px;
+    text-align: center;
+    color: var(--text-muted);
+}

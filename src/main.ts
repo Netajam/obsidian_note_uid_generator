@@ -1,6 +1,7 @@
 import {
 	App, Editor, MarkdownView, Notice, Plugin, TFile, TFolder,
-	debounce, Menu, TAbstractFile, WorkspaceLeaf 
+	debounce, Menu, TAbstractFile, WorkspaceLeaf, 
+    FileExplorerView
 } from 'obsidian';
 import { UIDGeneratorSettings, DEFAULT_SETTINGS, UIDSettingTab } from './settings';
 import * as commands from './commands';
@@ -10,7 +11,6 @@ export default class UIDGenerator extends Plugin {
 	settings: UIDGeneratorSettings;
 
 	async onload() {
-		console.log('Loading UID Generator Plugin v7 (files-menu)');
 		await this.loadSettings();
 
 		// --- Ribbon Icon ---
@@ -98,16 +98,24 @@ export default class UIDGenerator extends Plugin {
             name: `Copy titles+${this.settings.uidKey}s for selected files`,
             checkCallback: (checking: boolean): boolean | void => {
                 const fileExplorerLeaf = this.app.workspace.getLeavesOfType('file-explorer')
-                    ?.find(leaf => (leaf.view as any).selectedFiles && this.app.workspace.activeLeaf === leaf);
+                    ?.find(leaf => leaf.view.getViewType() === 'file-explorer' && this.app.workspace.activeLeaf === leaf); // More robust check
 
-                let markdownSelected = false;
-                if (fileExplorerLeaf) {
-                    const selectedPaths: string[] = (fileExplorerLeaf.view as any).selectedFiles || [];
-                    markdownSelected = selectedPaths.some(path => {
-                        const file = this.app.vault.getAbstractFileByPath(path);
-                        return file instanceof TFile && file.extension === 'md';
-                    });
-                }
+
+                    let markdownSelected = false;
+                    if (fileExplorerLeaf) {
+                        // Use the augmented interface with a type assertion
+                        const view = fileExplorerLeaf.view as FileExplorerView; // <-- Use the interface
+                        const selectedPaths: string[] = view.selectedFiles || []; // <-- Access via typed view
+    
+                        // Check if at least one selected file is markdown
+                        markdownSelected = selectedPaths.some(path => {
+                            // 'this' refers to the Plugin instance in main.ts
+                            // 'plugin' refers to the Plugin instance in commands.ts
+                            // Make sure to use the correct variable (this or plugin) depending on the file
+                            const file = this.app.vault.getAbstractFileByPath(path); // Or plugin.app.vault...
+                            return file instanceof TFile && file.extension === 'md';
+                        });
+                    }
 
                 const canRun = !!fileExplorerLeaf && markdownSelected;
 
@@ -166,7 +174,6 @@ export default class UIDGenerator extends Plugin {
 	}
 
 	onunload() {
-		console.log('Unloading UID Generator Plugin v7 (files-menu)');
 	}
 
 	// --- Settings Management ---

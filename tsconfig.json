@@ -18,7 +18,13 @@
       "ES7"
     ]
   },
+  "typeRoots": [
+    "./node_modules/@types", // Standard location for installed types
+    "./src/typings"        // Your custom typings folder
+  ],
   "include": [
-    "**/*.ts"
+    "**/*.ts","**/*.d.ts", "src/typings/obsidian.d.ts" 
+
+
   ]
 }

@@ -1,4 +1,4 @@
-import { App, Modal, TFolder, Setting, debounce } from 'obsidian';
+import { App, Modal, TFolder, debounce } from 'obsidian';
 import UIDGenerator from '../main';
 
 export class FolderExclusionModal extends Modal {

@@ -1,4 +1,4 @@
-import { Editor, MarkdownView, TFile, TFolder, Notice, normalizePath, WorkspaceLeaf } from 'obsidian';
+import { Editor, MarkdownView, TFile, TFolder, Notice, normalizePath, WorkspaceLeaf, FileExplorerView } from 'obsidian';
 import UIDGenerator from './main'; 
 import * as uidUtils from './uidUtils'; 
 
@@ -126,7 +126,6 @@ export function handleCopyTitleUid(plugin: UIDGenerator, specificFile?: TFile): 
 
 /** Logic for Folder Context Menu Action */
 export async function handleCopyTitlesAndUidsFromFolder(plugin: UIDGenerator, folder: TFolder): Promise<void> {
-	console.log(`[UIDGenerator] Copying titles+${plugin.settings.uidKey}s for folder: ${folder.path}`);
 	const markdownFiles = plugin.app.vault.getMarkdownFiles();
 	const filesInFolder: TFile[] = [];
 	const targetPath = folder.path;
@@ -182,8 +181,6 @@ export async function handleCopyTitlesAndUidsForMultipleFiles(plugin: UIDGenerat
         return;
     }
 
-	console.log(`[UIDGenerator] Copying titles+${plugin.settings.uidKey}s for ${files.length} selected files via context menu.`);
-
 	let outputLines: string[] = [];
 	let filesWithUidCount = 0;
 	const formatExists = plugin.settings.copyFormatString;
@@ -213,23 +210,34 @@ export async function handleCopyTitlesAndUidsForMultipleFiles(plugin: UIDGenerat
 
 /** Logic for Command Palette: Copy titles+UIDs for selected files in File Explorer */
 export async function handleCopyTitlesAndUidsForSelection(plugin: UIDGenerator): Promise<void> {
-    // Find the active File Explorer leaf/view
-    const fileExplorerLeaf = plugin.app.workspace.getLeavesOfType('file-explorer')
-        .find(leaf => (leaf.view as any).selectedFiles && plugin.app.workspace.activeLeaf === leaf);
+    // 1. Find the active File Explorer leaf more reliably
+    let fileExplorerLeaf: WorkspaceLeaf | undefined = undefined;
+    const explorerLeaves = plugin.app.workspace.getLeavesOfType('file-explorer');
+    if (explorerLeaves.length > 0) {
+        // Prefer the active leaf if it's a file explorer
+        if (plugin.app.workspace.activeLeaf && plugin.app.workspace.activeLeaf.view.getViewType() === 'file-explorer') {
+             fileExplorerLeaf = plugin.app.workspace.activeLeaf;
+        } else {
+            fileExplorerLeaf = explorerLeaves[0];
+        }
+    }
 
-    if (!fileExplorerLeaf || !(fileExplorerLeaf.view as any).selectedFiles) {
-        new Notice("No active file explorer with selected files found.");
+    if (!fileExplorerLeaf) {
+        new Notice("No active file explorer found.");
         return;
     }
 
-    // Access selected files
-    const selectedPaths: string[] = (fileExplorerLeaf.view as any).selectedFiles || [];
-
-    if (selectedPaths.length === 0) {
+    // 2. Assert the view type and check for selectedFiles property
+    const view = fileExplorerLeaf.view as FileExplorerView;
+    if (!view || !view.selectedFiles || view.selectedFiles.length === 0) {
         new Notice("No files selected in the file explorer.");
         return;
     }
 
+    // 3. Get the selected paths 
+    const selectedPaths: string[] = view.selectedFiles;
+
+    // 4. Filter for Markdown files 
     const filesToProcess: TFile[] = [];
     for (const path of selectedPaths) {
         const file = plugin.app.vault.getAbstractFileByPath(path);
@@ -243,7 +251,7 @@ export async function handleCopyTitlesAndUidsForSelection(plugin: UIDGenerator):
         return;
     }
 
-    // Delegate to the same logic used by the context menu
+    // 5. Delegate to the multi-file handler (no changes needed here)
     await handleCopyTitlesAndUidsForMultipleFiles(plugin, filesToProcess);
 }
 
@@ -256,7 +264,6 @@ export async function handleClearUIDsInFolder(plugin: UIDGenerator, folderPath: 
 	const folder = plugin.app.vault.getAbstractFileByPath(normalizedFolderPath);
 	if (!folder || !(folder instanceof TFolder)) { new Notice(`Folder not found or path is not a folder: ${folderPath}`); return; }
 
-	console.log(`[UIDGenerator] Starting UID clearing process for folder: ${folder.path} using key "${plugin.settings.uidKey}"`);
 	new Notice(`Clearing ${plugin.settings.uidKey}s in "${folder.name}"... This may take a moment.`);
 
 	const markdownFiles = plugin.app.vault.getMarkdownFiles();
@@ -275,7 +282,6 @@ export async function handleClearUIDsInFolder(plugin: UIDGenerator, folderPath: 
 		return;
 	}
 
-	console.log(`[UIDGenerator] Found ${filesToProcess.length} markdown files to process.`);
 	let clearedCount = 0;
 	let errorCount = 0;
 
@@ -293,7 +299,6 @@ export async function handleClearUIDsInFolder(plugin: UIDGenerator, folderPath: 
 		message += ` Encountered ${errorCount} errors (check console).`;
 	}
 	new Notice(message, 10000);
-	console.log(`[UIDGenerator] UID clearing finished. Removed: ${clearedCount}, Errors: ${errorCount}`);
 }
 
 
@@ -327,7 +332,6 @@ export async function handleAutoGenerateUid(plugin: UIDGenerator, file: TFile | 
 	}
 
 	// Generate and set
-	console.log(`[UIDGenerator] Auto-generating ${plugin.settings.uidKey} for: ${file.path}`);
 	const newUid = uidUtils.generateUID();
 	await uidUtils.setUID(plugin, file, newUid, false);
 }
@@ -347,7 +351,6 @@ export async function handleAddMissingUidsInScope(plugin: UIDGenerator): Promise
 	const noticeMessage = `Processing ${totalFiles} files for missing UIDs...`;
 	const notice = new Notice(noticeMessage, 0); // Show notice indefinitely until updated/hidden
 
-	console.log(`[UIDGenerator] Starting bulk check for missing UIDs. Scope: ${plugin.settings.autoGenerationScope}.`);
 
 	try { // Wrap the loop for final notice update
 		for (let i = 0; i < totalFiles; i++) {
@@ -422,6 +425,5 @@ export async function handleAddMissingUidsInScope(plugin: UIDGenerator): Promise
         }
 
         new Notice(summary, 10000 + errorCount * 100); // Show longer if errors
-        console.log(`[UIDGenerator] ${summary.replace(/\n- /g, ', ')}`);
     }
 }

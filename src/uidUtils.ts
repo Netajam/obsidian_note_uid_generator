@@ -59,7 +59,6 @@ export async function setUID(plugin: UIDGenerator, file: TFile, uid: string, ove
 			initialUidExists = currentUid !== undefined && currentUid !== null && currentUid !== ''; // Check before potential modification
 
 			if (initialUidExists && !overwrite) {
-				console.log(`[UIDGenerator] ${key} already exists for ${file.path}, not overwriting.`);
 				uidWasSetOrOverwritten = false; // Explicitly false
 				return; // Exit processor
 			}
@@ -83,7 +82,6 @@ export async function setUID(plugin: UIDGenerator, file: TFile, uid: string, ove
 		if (uidWasSetOrOverwritten) {
             // Determine action based on initial state and overwrite flag
             const action = initialUidExists && overwrite ? 'Overwrote' : 'Set';
-			console.log(`[UIDGenerator] ${action} ${key} for ${file.path}.`);
 		}
 		return uidWasSetOrOverwritten;
 
@@ -112,7 +110,6 @@ export async function removeUID(plugin: UIDGenerator, file: TFile): Promise<bool
 			}
 		});
 		if (uidWasPresent) {
-			console.log(`[UIDGenerator] Removed key "${key}" from ${file.path}`);
 		}
 		return uidWasPresent;
 	} catch (error) {

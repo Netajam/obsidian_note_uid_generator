@@ -118,23 +118,15 @@ export class UIDSettingTab extends PluginSettingTab {
                         new FolderExclusionModal(this.app, this.plugin, () => this.display()).open();
                     }));
 
-            // Display the current list of excluded folders (read-only in this view)
             const exclusionListEl = containerEl.createEl('ul', { cls: 'uid-exclusion-list' });
             if (this.plugin.settings.autoGenerationExclusions.length > 0) {
-                 // Sort before displaying for consistency
                  const sortedExclusions = [...this.plugin.settings.autoGenerationExclusions].sort();
                  sortedExclusions.forEach(folderPath => {
                     exclusionListEl.createEl('li', { text: folderPath });
                  });
             } else {
-                 // Display message if no folders are excluded
                  exclusionListEl.createEl('li', { text: 'No folders excluded.' });
             }
-            // Basic styling for the list
-            exclusionListEl.style.marginTop = '5px';
-            exclusionListEl.style.marginBottom = '15px';
-            exclusionListEl.style.paddingLeft = '20px';
-            exclusionListEl.style.listStyle = 'none'; // Or 'disc', 'circle' etc.
 
         } 
         new Setting(containerEl)
@@ -227,7 +219,6 @@ export class UIDSettingTab extends PluginSettingTab {
                             autoGenWasOn = true;
                             this.plugin.settings.autoGenerateUid = false;
                             await this.plugin.saveSettings(); 
-                            console.log("[UIDGenerator] Automatic UID generation temporarily disabled due to manual clear action.");
                         }
 
 						try {

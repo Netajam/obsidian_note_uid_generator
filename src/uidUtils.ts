@@ -1,6 +1,6 @@
-import { App, TFile, Notice, FrontMatterCache } from 'obsidian';
+import { TFile, Notice } from 'obsidian';
 import { v4 as uuidv4 } from 'uuid';
-import UIDGenerator from './main'; 
+import UIDGenerator from './main';
 
 /**
  * Generates a unique ID using the UUID v4 standard.
@@ -51,7 +51,7 @@ export async function setUID(plugin: UIDGenerator, file: TFile, uid: string, ove
 
 	let uidWasSetOrOverwritten = false;
 	const key = plugin.settings.uidKey;
-    let initialUidExists = false; // Keep track if UID existed before processing
+	let initialUidExists = false; // Keep track if UID existed before processing
 
 	try {
 		await plugin.app.fileManager.processFrontMatter(file, (frontmatter) => {
@@ -64,13 +64,13 @@ export async function setUID(plugin: UIDGenerator, file: TFile, uid: string, ove
 			}
 
 			// Only set the flag if the value actually changes or is newly set
-            if (frontmatter[key] !== uid) {
-			    frontmatter[key] = uid;
-			    uidWasSetOrOverwritten = true;
-            } else {
-                // If overwrite is true but value is the same, we didn't *really* change it
-                uidWasSetOrOverwritten = false;
-            }
+			if (frontmatter[key] !== uid) {
+				frontmatter[key] = uid;
+				uidWasSetOrOverwritten = true;
+			} else {
+				// If overwrite is true but value is the same, we didn't *really* change it
+				uidWasSetOrOverwritten = false;
+			}
 
 
 			// Optional cleanup
@@ -80,8 +80,8 @@ export async function setUID(plugin: UIDGenerator, file: TFile, uid: string, ove
 		});
 
 		if (uidWasSetOrOverwritten) {
-            // Determine action based on initial state and overwrite flag
-            const action = initialUidExists && overwrite ? 'Overwrote' : 'Set';
+			// Determine action based on initial state and overwrite flag
+			const action = initialUidExists && overwrite ? 'Overwrote' : 'Set';
 		}
 		return uidWasSetOrOverwritten;
 
@@ -129,9 +129,9 @@ export async function removeUID(plugin: UIDGenerator, file: TFile): Promise<bool
  */
 export function formatCopyString(plugin: UIDGenerator, formatString: string, title: string, uid: string | null | undefined): string {
 	let result = formatString;
-	const uidKey = plugin.settings.uidKey; 
+	const uidKey = plugin.settings.uidKey;
 	result = result.replace(/{title}/g, title || '');
 	result = result.replace(/{uidKey}/g, uidKey || '');
-	result = result.replace(/{uid}/g, uid || ''); 
+	result = result.replace(/{uid}/g, uid || '');
 	return result;
 }

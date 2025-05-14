@@ -15,9 +15,9 @@ export class ConfirmationModal extends Modal {
 
 	onOpen() {
 		const { contentEl } = this;
-		contentEl.empty();
+		contentEl.empty(); 
 
-		contentEl.createEl('h2', { text: 'Confirm UID Deletion' });
+		contentEl.createEl('h2', { text: 'Confirm uid deletion' });
 		contentEl.createEl('p', { text: `Are you sure you want to remove the '${this.uidKey}' metadata property from all notes within the folder "${this.folderPath}" and its subfolders?` });
 		contentEl.createEl('p', { text: `This action cannot be undone.` }).addClass('mod-warning');
 
@@ -27,7 +27,7 @@ export class ConfirmationModal extends Modal {
 		new Setting(buttonContainer)
 			.addButton((btn) =>
 				btn
-					.setButtonText('Confirm Deletion')
+					.setButtonText('Confirm deletion')
 					.setWarning()
 					.setCta()
 					.onClick(() => {

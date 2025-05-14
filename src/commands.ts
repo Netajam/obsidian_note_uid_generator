@@ -64,7 +64,7 @@ export async function handleRemoveUid(plugin: UIDGenerator): Promise<void> {
 			}
 		}
 	} else {
-		new Notice("No active markdown file to remove UID from.");
+		new Notice("No active markdown file to remove uid from.");
 	}
 }
 
@@ -82,7 +82,7 @@ export function handleCopyUid(plugin: UIDGenerator): void {
 			.then(() => new Notice(`${plugin.settings.uidKey} copied: ${uid}`))
 			.catch(err => {
 				console.error("[UIDGenerator] Error copying UID:", err);
-				new Notice("Error copying UID to clipboard.", 5000);
+				new Notice("Error copying uid to clipboard.", 5000);
 			});
 	} else {
 		// Should not happen if checkCallback works correctly
@@ -338,7 +338,7 @@ export async function handleAutoGenerateUid(plugin: UIDGenerator, file: TFile | 
 export async function handleAddMissingUidsInScope(plugin: UIDGenerator): Promise<void> {
 	const allFiles = plugin.app.vault.getMarkdownFiles();
 	if (allFiles.length === 0) {
-		new Notice("No Markdown files found in the vault.");
+		new Notice("No markdown files found in the vault.");
 		return;
 	}
 
@@ -406,7 +406,7 @@ export async function handleAddMissingUidsInScope(plugin: UIDGenerator): Promise
 				}
 			} catch (err) {
 				// Catch any unexpected errors from setUID itself
-				console.error(`[UIDGenerator] Unexpected error setting UID for ${file.path}:`, err);
+				console.error(`[UIDGenerator] Unexpected error setting uid for ${file.path}:`, err);
 				errorCount++;
 			}
 
@@ -419,7 +419,7 @@ export async function handleAddMissingUidsInScope(plugin: UIDGenerator): Promise
 		// --- Update/Hide Notice and Log Results ---
 		notice.hide(); // Hide the progress notice
 
-		let summary = `Bulk UID generation Complete:\n- Added: ${addedCount}\n- Skipped (already had UID): ${skippedExistingCount}\n- Skipped (out of scope/excluded): ${skippedScopeCount}`;
+		let summary = `Bulk uid generation complete:\n- Added: ${addedCount}\n- Skipped (already had uid): ${skippedExistingCount}\n- Skipped (out of scope/excluded): ${skippedScopeCount}`;
 		if (errorCount > 0) {
 			summary += `\n- Errors: ${errorCount} (see console)`;
 		}

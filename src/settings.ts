@@ -45,7 +45,7 @@ export class UIDSettingTab extends PluginSettingTab {
 		// --- General Settings ---
 		new Setting(containerEl)
 			.setName('UID metadata key')
-			.setDesc('The name of the key for the UID in frontmatter (e.g., "uid", "id"). No spaces.')
+			.setDesc('The name of the key for the uid in frontmatter (e.g., "uid", "id"). No spaces.')
 			.addText(text => text
 				.setPlaceholder('Default: uid')
 				.setValue(this.plugin.settings.uidKey)
@@ -62,11 +62,11 @@ export class UIDSettingTab extends PluginSettingTab {
 
 
 		// --- Automatic UID Generation ---
-		new Setting(containerEl).setName('Automatic UID generation').setHeading();
+		new Setting(containerEl).setName('Automatic uid generation').setHeading();
 		containerEl.createEl('p', { text: `Automatically add a ${this.plugin.settings.uidKey} to notes when they are created or opened, if they don't already have one.` }).addClass('setting-item-description');
 
 		new Setting(containerEl)
-			.setName('Enable automatic UID generation')
+			.setName('Enable automatic uid generation')
 			.addToggle(toggle => toggle
 				.setValue(this.plugin.settings.autoGenerateUid)
 				.onChange(async (value) => {
@@ -93,7 +93,7 @@ export class UIDSettingTab extends PluginSettingTab {
 			if (this.plugin.settings.autoGenerationScope === 'folder') {
 				new Setting(containerEl)
 					.setName('Target folder for auto-generation')
-					.setDesc('Generate UIDs only for notes in this folder (and subfolders).')
+					.setDesc('Generate uids only for notes in this folder (and subfolders).')
 					.addText(text => {
 						new FolderSuggest(this.app, text.inputEl);
 						text.setPlaceholder('Example: Notes/Inbox')
@@ -108,7 +108,7 @@ export class UIDSettingTab extends PluginSettingTab {
 			// --- Excluded Folders Setting with Modal Button ---
 			new Setting(containerEl)
 				.setName('Excluded folders')
-				.setDesc('Folders excluded from automatic UID generation. Click button to manage.')
+				.setDesc('Folders excluded from automatic uid generation. Click button to manage.')
 				.addButton(button => button
 					.setButtonText('Manage exclusions')
 					.onClick(() => {
@@ -130,8 +130,8 @@ export class UIDSettingTab extends PluginSettingTab {
 			.setName(`Generate missing ${this.plugin.settings.uidKey}s now`)
 			.setDesc(`Manually scan notes based on the current 'Generation scope' and 'Excluded folders' settings above. Add a ${this.plugin.settings.uidKey} to any applicable notes that don't already have one. This may take time for large vaults.`)
 			.addButton(button => button
-				.setButtonText("Generate Missing UIDs")
-				.setTooltip("Scan and add missing UIDs respecting scope/exclusions")
+				.setButtonText("Generate missing uids")
+				.setTooltip("Scan and add missing uids respecting scope/exclusions")
 				.onClick(async () => {
 					button.setDisabled(true); // Disable button during processing
 					button.setButtonText("Processing...");
@@ -139,7 +139,7 @@ export class UIDSettingTab extends PluginSettingTab {
 						await this.plugin.triggerAddMissingUidsInScope();
 					} catch (e) {
 						// Catch potential errors from the trigger function itself
-						console.error("[UIDGenerator] Error triggering bulk UID generation:", e);
+						console.error("[UIDGenerator] Error triggering bulk uid generation:", e);
 						new Notice("Failed to start bulk generation. See console.", 5000);
 					} finally {
 						// Re-enable button regardless of success/failure
@@ -153,8 +153,8 @@ export class UIDSettingTab extends PluginSettingTab {
 		containerEl.createEl('p', { text: 'Define the format for copied text using placeholders: {title}, {uid}, {uidKey}.' }).addClass('setting-item-description');
 
 		new Setting(containerEl)
-			.setName('Format (UID exists)')
-			.setDesc('Format string used when copying title and UID, and the UID exists.')
+			.setName('Format (uid exists)')
+			.setDesc('Format string used when copying title and uid, and the uid exists.')
 			.addText(text => text
 				.setPlaceholder(DEFAULT_SETTINGS.copyFormatString)
 				.setValue(this.plugin.settings.copyFormatString)
@@ -165,8 +165,8 @@ export class UIDSettingTab extends PluginSettingTab {
 				}));
 
 		new Setting(containerEl)
-			.setName('Format (UID missing)')
-			.setDesc('Format string used when copying, but the note has no UID.')
+			.setName('Format (uid missing)')
+			.setDesc('Format string used when copying, but the note has no uid.')
 			.addText(text => text
 				.setPlaceholder(DEFAULT_SETTINGS.copyFormatStringMissingUid)
 				.setValue(this.plugin.settings.copyFormatStringMissingUid)
@@ -177,11 +177,11 @@ export class UIDSettingTab extends PluginSettingTab {
 				}));
 
 
-		// --- Manual UID Clearing ---
-		new Setting(containerEl).setName('Manual UID Clearing').setHeading();
+		// --- Manual uid Clearing ---
+		new Setting(containerEl).setName('Manual uid clearing').setHeading();
 		new Setting(containerEl)
-			.setName('Folder to clear UIDs from')
-			.setDesc('Specify the vault path to remove UIDs from notes within.')
+			.setName('Folder to clear uids from')
+			.setDesc('Specify the vault path to remove uids from notes within.')
 			.addText(text => {
 				new FolderSuggest(this.app, text.inputEl);
 				text.setPlaceholder('Example: folder/subfolder')
@@ -193,17 +193,17 @@ export class UIDSettingTab extends PluginSettingTab {
 			});
 
 		new Setting(containerEl)
-			.setName('Clear UIDs in folder')
+			.setName('Clear uids in folder')
 			.setDesc(`WARNING: This permanently removes the "${this.plugin.settings.uidKey}" metadata from notes in the specified folder/subfolders and temporarily disables auto-generation.`)
 			.addButton(button => button
-				.setButtonText('Clear UIDs now')
+				.setButtonText('Clear uids now')
 				.setWarning()
 				.onClick(async () => {
 					const folderPath = this.plugin.settings.folderToClear;
 					const uidKey = this.plugin.settings.uidKey;
 					// Basic validation for the folder path input
 					if (!folderPath || folderPath.trim() === '') {
-						new Notice("Please specify a folder path in the 'Folder to clear UIDs from' setting above first.");
+						new Notice("Please specify a folder path in the 'Folder to clear uids from' setting above first.");
 						return; // Prevent proceeding without a path
 					}
 
@@ -223,13 +223,13 @@ export class UIDSettingTab extends PluginSettingTab {
 							await this.plugin.clearUIDsInFolder(folderPath);
 						} catch (err) {
 							// Catch potential errors during the clearing process
-							console.error("[UIDGenerator] Error during bulk UID clearing process:", err);
-							new Notice("An unexpected error occurred during UID clearing. Check console.", 5000);
+							console.error("[UIDGenerator] Error during bulk uid clearing process:", err);
+							new Notice("An unexpected error occurred during uid clearing. Check console.", 5000);
 						} finally {
 							// 3. This block runs whether the clearing succeeded or failed
 							if (autoGenWasOn) {
 								// Notify the user that auto-gen was turned off
-								new Notice("Automatic UID generation was disabled. You can re-enable it in settings if desired.", 8000);
+								new Notice("Automatic uid generation was disabled. You can re-enable it in settings if desired.", 8000);
 							}
 							// 4. Re-render the settings tab display to reflect any changes 
 							this.display();

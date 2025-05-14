@@ -26,8 +26,8 @@ export class FolderExclusionModal extends Modal {
 		contentEl.empty();
 		contentEl.addClass('uid-folder-exclusion-modal');
 
-		contentEl.createEl('h2', { text: 'Manage Excluded Folders' });
-		contentEl.createEl('p', { text: 'Add or remove folders from the automatic UID generation exclusion list.' });
+		contentEl.createEl('h2', { text: 'Manage excluded folders' });
+		contentEl.createEl('p', { text: 'Add or remove folders from the automatic uid generation exclusion list.' });
 
 		// Search Input
 		this.inputEl = contentEl.createEl('input', { type: 'text', placeholder: 'Search folders...' });

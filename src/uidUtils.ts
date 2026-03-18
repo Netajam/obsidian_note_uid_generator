@@ -1,11 +1,46 @@
 import { TFile, Notice } from 'obsidian';
 import { v4 as uuidv4 } from 'uuid';
+import { customAlphabet } from 'nanoid';
 import UIDGenerator from './main';
 
 /**
  * Generates a unique ID using the UUID v4 standard.
+ * @param plugin The UIDGenerator plugin instance (for settings).
  */
-export function generateUID(): string {
+export function generateUID(plugin: UIDGenerator): string {
+	if (plugin.settings.uidGenerator === 'nanoid') {
+		const alphabet = plugin.settings.nanoidAlphabet;
+		const length = plugin.settings.nanoidLength;
+		const nanoid = customAlphabet(alphabet, length);
+		let id = nanoid();
+
+		const separators = plugin.settings.nanoidSeparators;
+
+		if (separators && separators.length > 0) {
+			// Create a mutable array of insertions, normalizing positions
+			const insertions = separators
+				.filter(s => s.char && s.char.length > 0) // Only process non-empty chars
+				.map(s => {
+					let actualPosition = s.position;
+					// Normalize negative positions relative to the *initial* nanoid length
+					if (actualPosition < 0) {
+						actualPosition = length + actualPosition; // e.g., length=21, pos=-2 -> 19
+					}
+					// Ensure position is within bounds [0, length]
+					actualPosition = Math.max(0, Math.min(length, actualPosition));
+					return { char: s.char, position: actualPosition };
+				})
+				.sort((a, b) => b.position - a.position); // Sort descending by position
+
+			// Apply insertions from right to left to avoid index shifting issues
+			for (const insertion of insertions) {
+				const { char, position } = insertion;
+				id = id.slice(0, position) + char + id.slice(position);
+			}
+		}
+
+		return id;
+	}
 	return uuidv4();
 }
 
@@ -24,7 +59,7 @@ export function getUIDFromFile(plugin: UIDGenerator, file: TFile | null): string
 			return null;
 		}
 		const uidValue = frontmatter[plugin.settings.uidKey];
-		// Ensure it's treated as a string, even if stored as number in YAML
+		// Ensure it\'s treated as a string, even if stored as number in YAML
 		return typeof uidValue === 'string' || typeof uidValue === 'number' ? String(uidValue) : null;
 	} catch (error) {
 		console.error(`[UIDGenerator] Error reading metadata for ${file.path}:`, error);
@@ -33,7 +68,7 @@ export function getUIDFromFile(plugin: UIDGenerator, file: TFile | null): string
 }
 
 /**
- * Sets or updates the UID property in a file's frontmatter.
+ * Sets or updates the UID property in a file\'s frontmatter.
  * @param plugin The UIDGenerator plugin instance.
  * @param file The TFile to modify.
  * @param uid The UID string to set.
@@ -68,7 +103,7 @@ export async function setUID(plugin: UIDGenerator, file: TFile, uid: string, ove
 				frontmatter[key] = uid;
 				uidWasSetOrOverwritten = true;
 			} else {
-				// If overwrite is true but value is the same, we didn't *really* change it
+				// If overwrite is true but value is the same, we didn\'t *really* change it
 				uidWasSetOrOverwritten = false;
 			}
 
@@ -93,7 +128,7 @@ export async function setUID(plugin: UIDGenerator, file: TFile, uid: string, ove
 }
 
 /**
- * Removes the UID property from a file's frontmatter, respecting the custom key.
+ * Removes the UID property from a file\'s frontmatter, respecting the custom key.
  * @param plugin The UIDGenerator plugin instance.
  * @param file The TFile to modify.
  * @returns Promise<boolean> - True if a UID was found and removed, false otherwise.

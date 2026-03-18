@@ -9,7 +9,7 @@ export async function handleGenerateUpdateUid(plugin: UIDGenerator, overwrite: t
 	const view = plugin.app.workspace.getActiveViewOfType(MarkdownView);
 	if (view?.file) {
 		const file = view.file;
-		const newUid = uidUtils.generateUID();
+		const newUid = uidUtils.generateUID(plugin);
 		const setResult = await uidUtils.setUID(plugin, file, newUid, overwrite); // Use util
 
 		if (setResult) {
@@ -36,7 +36,7 @@ export async function handleCreateUidIfMissing(plugin: UIDGenerator): Promise<vo
 			return;
 		}
 
-		const newUid = uidUtils.generateUID();
+		const newUid = uidUtils.generateUID(plugin);
 		const setResult = await uidUtils.setUID(plugin, file, newUid, false); // Use util, NO overwrite
 
 		if (setResult) {
@@ -234,10 +234,10 @@ export async function handleCopyTitlesAndUidsForSelection(plugin: UIDGenerator):
 		return;
 	}
 
-	// 3. Get the selected paths 
+	// 3. Get the selected paths
 	const selectedPaths: string[] = view.selectedFiles;
 
-	// 4. Filter for Markdown files 
+	// 4. Filter for Markdown files
 	const filesToProcess: TFile[] = [];
 	for (const path of selectedPaths) {
 		const file = plugin.app.vault.getAbstractFileByPath(path);
@@ -332,7 +332,7 @@ export async function handleAutoGenerateUid(plugin: UIDGenerator, file: TFile | 
 	}
 
 	// Generate and set
-	const newUid = uidUtils.generateUID();
+	const newUid = uidUtils.generateUID(plugin);
 	await uidUtils.setUID(plugin, file, newUid, false);
 }
 export async function handleAddMissingUidsInScope(plugin: UIDGenerator): Promise<void> {
@@ -395,7 +395,7 @@ export async function handleAddMissingUidsInScope(plugin: UIDGenerator): Promise
 			}
 
 			// --- Generate and Set UID ---
-			const newUid = uidUtils.generateUID();
+			const newUid = uidUtils.generateUID(plugin);
 			try {
 				const success = await uidUtils.setUID(plugin, file, newUid, false); // Do not overwrite
 				if (success) {

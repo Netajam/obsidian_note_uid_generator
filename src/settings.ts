@@ -8,6 +8,10 @@ import { FolderExclusionModal } from './ui/FolderExclusionModal';
 export interface UIDGeneratorSettings {
 	uidKey: string;
 	autoGenerateUid: boolean;
+	uidGenerator: 'uuid' | 'nanoid';
+	nanoidLength: number;
+	nanoidAlphabet: string;
+	nanoidSeparators: Array<{ char: string; position: number }>;
 	autoGenerationScope: 'vault' | 'folder';
 	autoGenerationFolder: string;
 	autoGenerationExclusions: string[];
@@ -20,6 +24,10 @@ export interface UIDGeneratorSettings {
 export const DEFAULT_SETTINGS: UIDGeneratorSettings = {
 	uidKey: 'uid',
 	autoGenerateUid: false,
+	uidGenerator: 'uuid',
+	nanoidLength: 21,
+	nanoidAlphabet: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz',
+	nanoidSeparators: [],
 	autoGenerationScope: 'vault',
 	autoGenerationFolder: '',
 	autoGenerationExclusions: [],
@@ -60,6 +68,104 @@ export class UIDSettingTab extends PluginSettingTab {
 					this.display(); // Re-render to potentially update descriptions elsewhere
 				}));
 
+		// --- UID Generator Type ---
+		new Setting(containerEl).setName('UID generator type').setHeading();
+
+		new Setting(containerEl)
+			.setName('Generator algorithm')
+			.setDesc('Choose between UUID (standard v4) or NanoID (customizable).')
+			.addDropdown(dropdown => dropdown
+				.addOption('uuid', 'UUID')
+				.addOption('nanoid', 'NanoID')
+				.setValue(this.plugin.settings.uidGenerator)
+				.onChange(async (value: 'uuid' | 'nanoid') => {
+					this.plugin.settings.uidGenerator = value;
+					await this.plugin.saveSettings();
+					this.display();
+				}));
+
+		if (this.plugin.settings.uidGenerator === 'nanoid') {
+			new Setting(containerEl)
+				.setName('NanoID length')
+				.setDesc('Length of the generated ID (excluding injected characters).')
+				.addText(text => text
+					.setValue(String(this.plugin.settings.nanoidLength))
+					.onChange(async (value) => {
+						const num = parseInt(value);
+						if (!isNaN(num) && num > 0) {
+							this.plugin.settings.nanoidLength = num;
+							await this.plugin.saveSettings();
+						}
+					}));
+
+			new Setting(containerEl)
+				.setName('NanoID alphabet')
+				.setDesc('Custom characters to use for ID generation.')
+				.addTextArea(text => text
+					.setValue(this.plugin.settings.nanoidAlphabet)
+					.onChange(async (value) => {
+						if (value.length > 0) {
+							this.plugin.settings.nanoidAlphabet = value;
+							await this.plugin.saveSettings();
+						}
+					}));
+
+			// --- NanoID Separator Groups ---
+			containerEl.createEl('h3', { text: 'NanoID Separator Groups' });
+			containerEl.createEl('p', { text: 'Define characters to inject into the NanoID at specific positions. Position is calculated from the raw Base ID.' }).addClass('setting-item-description');
+
+			this.plugin.settings.nanoidSeparators.forEach((separator, index) => {
+				const groupContainer = containerEl.createEl('div', { cls: 'uid-separator-group-container' });
+
+				new Setting(groupContainer)
+					.setName(`Separator Group ${index + 1}`)
+					.setHeading()
+					.addButton(button => button
+						.setButtonText('Remove')
+						.setWarning()
+						.setTooltip('Remove this separator group')
+						.onClick(async () => {
+							this.plugin.settings.nanoidSeparators.splice(index, 1);
+							await this.plugin.saveSettings();
+							this.display();
+						}));
+
+				new Setting(groupContainer)
+					.setName(`Inject character`)
+					.setDesc('Character to inject (e.g., "+").')
+					.addText(text => text
+						.setValue(separator.char)
+						.onChange(async (value) => {
+							this.plugin.settings.nanoidSeparators[index].char = value;
+							await this.plugin.saveSettings();
+						}));
+
+				new Setting(groupContainer)
+					.setName(`Injection position`)
+					.setDesc('Index to inject the character. Negative numbers count from the end.')
+					.addText(text => text
+						.setValue(String(separator.position))
+						.onChange(async (value) => {
+							const num = parseInt(value);
+							if (!isNaN(num)) {
+								this.plugin.settings.nanoidSeparators[index].position = num;
+								await this.plugin.saveSettings();
+							}
+						}));
+			});
+
+			new Setting(containerEl)
+				.setName('Add new separator group')
+				.setDesc('Adds a new group for injecting a character at a specific position.')
+				.addButton(button => button
+					.setButtonText('Add Group')
+					.setCta()
+					.onClick(async () => {
+						this.plugin.settings.nanoidSeparators.push({ char: '', position: -2 });
+						await this.plugin.saveSettings();
+						this.display();
+					}));
+		}
 
 		// --- Automatic UID Generation ---
 		new Setting(containerEl).setName('Automatic uid generation').setHeading();
@@ -130,21 +236,21 @@ export class UIDSettingTab extends PluginSettingTab {
 			.setName(`Generate missing ${this.plugin.settings.uidKey}s now`)
 			.setDesc(`Manually scan notes based on the current 'Generation scope' and 'Excluded folders' settings above. Add a ${this.plugin.settings.uidKey} to any applicable notes that don't already have one. This may take time for large vaults.`)
 			.addButton(button => button
-				.setButtonText("Generate missing uids")
-				.setTooltip("Scan and add missing uids respecting scope/exclusions")
+				.setButtonText('Generate missing uids')
+				.setTooltip('Scan and add missing uids respecting scope/exclusions')
 				.onClick(async () => {
 					button.setDisabled(true); // Disable button during processing
-					button.setButtonText("Processing...");
+					button.setButtonText('Processing...');
 					try {
 						await this.plugin.triggerAddMissingUidsInScope();
 					} catch (e) {
 						// Catch potential errors from the trigger function itself
-						console.error("[UIDGenerator] Error triggering bulk uid generation:", e);
-						new Notice("Failed to start bulk generation. See console.", 5000);
+						console.error('[UIDGenerator] Error triggering bulk uid generation:', e);
+						new Notice('Failed to start bulk generation. See console.', 5000);
 					} finally {
 						// Re-enable button regardless of success/failure
 						button.setDisabled(false);
-						button.setButtonText("Generate missing uids");
+						button.setButtonText('Generate missing uids');
 					}
 				}));
 
@@ -203,7 +309,7 @@ export class UIDSettingTab extends PluginSettingTab {
 					const uidKey = this.plugin.settings.uidKey;
 					// Basic validation for the folder path input
 					if (!folderPath || folderPath.trim() === '') {
-						new Notice("Please specify a folder path in the 'Folder to clear uids from' setting above first.");
+						new Notice('Please specify a folder path in the \'Folder to clear uids from\' setting above first.');
 						return; // Prevent proceeding without a path
 					}
 
@@ -223,18 +329,18 @@ export class UIDSettingTab extends PluginSettingTab {
 							await this.plugin.clearUIDsInFolder(folderPath);
 						} catch (err) {
 							// Catch potential errors during the clearing process
-							console.error("[UIDGenerator] Error during bulk uid clearing process:", err);
-							new Notice("An unexpected error occurred during uid clearing. Check console.", 5000);
+							console.error('[UIDGenerator] Error during bulk uid clearing process:', err);
+							new Notice('An unexpected error occurred during uid clearing. Check console.', 5000);
 						} finally {
 							// 3. This block runs whether the clearing succeeded or failed
 							if (autoGenWasOn) {
 								// Notify the user that auto-gen was turned off
-								new Notice("Automatic uid generation was disabled. You can re-enable it in settings if desired.", 8000);
+								new Notice('Automatic uid generation was disabled. You can re-enable it in settings if desired.', 8000);
 							}
-							// 4. Re-render the settings tab display to reflect any changes 
+							// 4. Re-render the settings tab display to reflect any changes
 							this.display();
 						}
 					}).open();
 				}));
 	}
-} 
+}

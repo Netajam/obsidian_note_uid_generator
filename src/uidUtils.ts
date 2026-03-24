@@ -3,38 +3,61 @@ import { v4 as uuidv4 } from 'uuid';
 import { customAlphabet } from 'nanoid';
 import UIDGenerator from './main';
 
+// Cache the nanoid generator to avoid recreating on every call
+let cachedNanoid: (() => string) | null = null;
+let cachedAlphabet = '';
+let cachedLength = 0;
+
+function getNanoidGenerator(alphabet: string, length: number): () => string {
+	if (cachedNanoid && cachedAlphabet === alphabet && cachedLength === length) {
+		return cachedNanoid;
+	}
+	cachedAlphabet = alphabet;
+	cachedLength = length;
+	cachedNanoid = customAlphabet(alphabet, length);
+	return cachedNanoid;
+}
+
 /**
- * Generates a unique ID using the UUID v4 standard.
+ * Generates a unique ID using UUID v4 or NanoID based on settings.
  * @param plugin The UIDGenerator plugin instance (for settings).
  */
+const MAX_COLLISION_RETRIES = 10;
+
 export function generateUID(plugin: UIDGenerator): string {
+	for (let attempt = 0; attempt < MAX_COLLISION_RETRIES; attempt++) {
+		const id = generateRawUID(plugin);
+		if (!plugin.uidCache.has(id)) {
+			return id;
+		}
+		console.warn(`[UIDGenerator] Collision detected for "${id}", retrying (${attempt + 1}/${MAX_COLLISION_RETRIES})`);
+	}
+	// Fallback: return the last generated ID anyway (extremely unlikely to reach here)
+	const fallback = generateRawUID(plugin);
+	console.error(`[UIDGenerator] Failed to generate unique ID after ${MAX_COLLISION_RETRIES} attempts. Using potentially duplicate ID.`);
+	return fallback;
+}
+
+function generateRawUID(plugin: UIDGenerator): string {
 	if (plugin.settings.uidGenerator === 'nanoid') {
-		const alphabet = plugin.settings.nanoidAlphabet;
-		const length = plugin.settings.nanoidLength;
-		const nanoid = customAlphabet(alphabet, length);
+		const { nanoidAlphabet, nanoidLength, nanoidSeparators } = plugin.settings;
+		const nanoid = getNanoidGenerator(nanoidAlphabet, nanoidLength);
 		let id = nanoid();
 
-		const separators = plugin.settings.nanoidSeparators;
-
-		if (separators && separators.length > 0) {
-			// Create a mutable array of insertions, normalizing positions
-			const insertions = separators
-				.filter(s => s.char && s.char.length > 0) // Only process non-empty chars
+		if (nanoidSeparators && nanoidSeparators.length > 0) {
+			const insertions = nanoidSeparators
+				.filter(s => s.char && s.char.length === 1)
 				.map(s => {
-					let actualPosition = s.position;
-					// Normalize negative positions relative to the *initial* nanoid length
-					if (actualPosition < 0) {
-						actualPosition = length + actualPosition; // e.g., length=21, pos=-2 -> 19
+					let pos = s.position;
+					if (pos < 0) {
+						pos = nanoidLength + pos;
 					}
-					// Ensure position is within bounds [0, length]
-					actualPosition = Math.max(0, Math.min(length, actualPosition));
-					return { char: s.char, position: actualPosition };
+					pos = Math.max(0, Math.min(nanoidLength, pos));
+					return { char: s.char, position: pos };
 				})
-				.sort((a, b) => b.position - a.position); // Sort descending by position
+				.sort((a, b) => b.position - a.position);
 
-			// Apply insertions from right to left to avoid index shifting issues
-			for (const insertion of insertions) {
-				const { char, position } = insertion;
+			for (const { char, position } of insertions) {
 				id = id.slice(0, position) + char + id.slice(position);
 			}
 		}
@@ -59,7 +82,7 @@ export function getUIDFromFile(plugin: UIDGenerator, file: TFile | null): string
 			return null;
 		}
 		const uidValue = frontmatter[plugin.settings.uidKey];
-		// Ensure it\'s treated as a string, even if stored as number in YAML
+		// Ensure it's treated as a string, even if stored as number in YAML
 		return typeof uidValue === 'string' || typeof uidValue === 'number' ? String(uidValue) : null;
 	} catch (error) {
 		console.error(`[UIDGenerator] Error reading metadata for ${file.path}:`, error);
@@ -68,7 +91,7 @@ export function getUIDFromFile(plugin: UIDGenerator, file: TFile | null): string
 }
 
 /**
- * Sets or updates the UID property in a file\'s frontmatter.
+ * Sets or updates the UID property in a file's frontmatter.
  * @param plugin The UIDGenerator plugin instance.
  * @param file The TFile to modify.
  * @param uid The UID string to set.
@@ -103,7 +126,7 @@ export async function setUID(plugin: UIDGenerator, file: TFile, uid: string, ove
 				frontmatter[key] = uid;
 				uidWasSetOrOverwritten = true;
 			} else {
-				// If overwrite is true but value is the same, we didn\'t *really* change it
+				// If overwrite is true but value is the same, we didn't *really* change it
 				uidWasSetOrOverwritten = false;
 			}
 
@@ -115,8 +138,8 @@ export async function setUID(plugin: UIDGenerator, file: TFile, uid: string, ove
 		});
 
 		if (uidWasSetOrOverwritten) {
-			// Determine action based on initial state and overwrite flag
-			const action = initialUidExists && overwrite ? 'Overwrote' : 'Set';
+			plugin.uidCache.add(uid);
+			plugin.uidPathMap.set(file.path, uid);
 		}
 		return uidWasSetOrOverwritten;
 
@@ -128,7 +151,7 @@ export async function setUID(plugin: UIDGenerator, file: TFile, uid: string, ove
 }
 
 /**
- * Removes the UID property from a file\'s frontmatter, respecting the custom key.
+ * Removes the UID property from a file's frontmatter, respecting the custom key.
  * @param plugin The UIDGenerator plugin instance.
  * @param file The TFile to modify.
  * @returns Promise<boolean> - True if a UID was found and removed, false otherwise.
@@ -136,15 +159,19 @@ export async function setUID(plugin: UIDGenerator, file: TFile, uid: string, ove
 export async function removeUID(plugin: UIDGenerator, file: TFile): Promise<boolean> {
 	if (!file || !(file instanceof TFile)) return false;
 	let uidWasPresent = false;
+	let removedUid: string | null = null;
 	const key = plugin.settings.uidKey;
 	try {
 		await plugin.app.fileManager.processFrontMatter(file, (frontmatter) => {
 			if (frontmatter.hasOwnProperty(key)) {
+				removedUid = String(frontmatter[key]);
 				uidWasPresent = true;
 				delete frontmatter[key];
 			}
 		});
-		if (uidWasPresent) {
+		if (uidWasPresent && removedUid) {
+			plugin.uidCache.delete(removedUid);
+			plugin.uidPathMap.delete(file.path);
 		}
 		return uidWasPresent;
 	} catch (error) {

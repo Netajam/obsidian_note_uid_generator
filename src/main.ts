@@ -9,6 +9,8 @@ import * as uidUtils from './uidUtils';
 
 export default class UIDGenerator extends Plugin {
 	settings: UIDGeneratorSettings;
+	uidCache: Set<string> = new Set();
+	uidPathMap: Map<string, string> = new Map(); // filePath → uid
 
 	async onload() {
 		await this.loadSettings();
@@ -26,9 +28,44 @@ export default class UIDGenerator extends Plugin {
 		// could be implemented but adds complexity (managing timers per file path).
 		const debouncedFileHandler = debounce(commands.handleAutoGenerateUid.bind(null, this), 500, true);
 		this.app.workspace.onLayoutReady(() => {
+			this.buildUidCache();
 			this.registerEvent(this.app.vault.on('create', (file) => {
 				if (file instanceof TFile && file.extension === 'md') {
+					// Sync cache for files dropped/synced into vault that already have a UID
+					const existingUid = uidUtils.getUIDFromFile(this, file);
+					if (existingUid) {
+						this.uidCache.add(existingUid);
+						this.uidPathMap.set(file.path, existingUid);
+					}
 					debouncedFileHandler(file);
+				}
+			}));
+			this.registerEvent(this.app.vault.on('delete', (file) => {
+				if (file instanceof TFile && file.extension === 'md') {
+					// Use path map since metadata cache may already be cleared
+					const uid = this.uidPathMap.get(file.path);
+					if (uid) {
+						this.uidCache.delete(uid);
+						this.uidPathMap.delete(file.path);
+					}
+				}
+			}));
+			// Sync cache when frontmatter is edited externally or by another plugin
+			this.registerEvent(this.app.metadataCache.on('changed', (file) => {
+				if (file instanceof TFile && file.extension === 'md') {
+					const oldUid = this.uidPathMap.get(file.path);
+					const newUid = uidUtils.getUIDFromFile(this, file);
+					if (oldUid !== newUid) {
+						if (oldUid) {
+							this.uidCache.delete(oldUid);
+						}
+						if (newUid) {
+							this.uidCache.add(newUid);
+							this.uidPathMap.set(file.path, newUid);
+						} else {
+							this.uidPathMap.delete(file.path);
+						}
+					}
 				}
 			}));
 			this.registerEvent(this.app.workspace.on('file-open', (file) => {
@@ -187,6 +224,9 @@ export default class UIDGenerator extends Plugin {
 		if (!Array.isArray(this.settings.autoGenerationExclusions)) {
 			this.settings.autoGenerationExclusions = [];
 		}
+		if (!Array.isArray(this.settings.nanoidSeparators)) {
+			this.settings.nanoidSeparators = [];
+		}
 		this.settings.copyFormatString = this.settings.copyFormatString || DEFAULT_SETTINGS.copyFormatString;
 		this.settings.copyFormatStringMissingUid = this.settings.copyFormatStringMissingUid || DEFAULT_SETTINGS.copyFormatStringMissingUid;
 	}
@@ -194,6 +234,20 @@ export default class UIDGenerator extends Plugin {
 	async saveSettings() {
 		await this.saveData(this.settings);
 
+	}
+
+	// --- UID Cache ---
+	buildUidCache(): void {
+		this.uidCache.clear();
+		this.uidPathMap.clear();
+		const files = this.app.vault.getMarkdownFiles();
+		for (const file of files) {
+			const uid = uidUtils.getUIDFromFile(this, file);
+			if (uid) {
+				this.uidCache.add(uid);
+				this.uidPathMap.set(file.path, uid);
+			}
+		}
 	}
 
 	// --- Public method needed by Settings Tab ---

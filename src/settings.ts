@@ -59,13 +59,17 @@ export class UIDSettingTab extends PluginSettingTab {
 				.setValue(this.plugin.settings.uidKey)
 				.onChange(async (value) => {
 					const cleanedValue = value.trim().replace(/\s+/g, '');
-					this.plugin.settings.uidKey = cleanedValue || DEFAULT_SETTINGS.uidKey;
+					const newKey = cleanedValue || DEFAULT_SETTINGS.uidKey;
+					const keyChanged = newKey !== this.plugin.settings.uidKey;
+					this.plugin.settings.uidKey = newKey;
 					if (value !== this.plugin.settings.uidKey) {
-						// Update input value if it was cleaned (e.g., spaces removed)
 						text.setValue(this.plugin.settings.uidKey);
 					}
 					await this.plugin.saveSettings();
-					this.display(); // Re-render to potentially update descriptions elsewhere
+					if (keyChanged) {
+						this.plugin.buildUidCache();
+					}
+					this.display();
 				}));
 
 		// --- UID Generator Type ---
@@ -87,12 +91,12 @@ export class UIDSettingTab extends PluginSettingTab {
 		if (this.plugin.settings.uidGenerator === 'nanoid') {
 			new Setting(containerEl)
 				.setName('NanoID length')
-				.setDesc('Length of the generated ID (excluding injected characters).')
+				.setDesc('Length of the generated ID (excluding separators). Min 4, max 128.')
 				.addText(text => text
 					.setValue(String(this.plugin.settings.nanoidLength))
 					.onChange(async (value) => {
 						const num = parseInt(value);
-						if (!isNaN(num) && num > 0) {
+						if (!isNaN(num) && num >= 4 && num <= 128) {
 							this.plugin.settings.nanoidLength = num;
 							await this.plugin.saveSettings();
 						}
@@ -100,11 +104,12 @@ export class UIDSettingTab extends PluginSettingTab {
 
 			new Setting(containerEl)
 				.setName('NanoID alphabet')
-				.setDesc('Custom characters to use for ID generation.')
+				.setDesc('Characters used for ID generation. Must have at least 2 unique characters.')
 				.addTextArea(text => text
 					.setValue(this.plugin.settings.nanoidAlphabet)
 					.onChange(async (value) => {
-						if (value.length > 0) {
+						const unique = new Set(value);
+						if (unique.size >= 2) {
 							this.plugin.settings.nanoidAlphabet = value;
 							await this.plugin.saveSettings();
 						}
@@ -131,12 +136,13 @@ export class UIDSettingTab extends PluginSettingTab {
 						}));
 
 				new Setting(groupContainer)
-					.setName(`Inject character`)
-					.setDesc('Character to inject (e.g., "+").')
+					.setName('Inject character')
+					.setDesc('Single character to inject (e.g., "-").')
 					.addText(text => text
 						.setValue(separator.char)
 						.onChange(async (value) => {
-							this.plugin.settings.nanoidSeparators[index].char = value;
+							const char = value.slice(0, 1);
+							this.plugin.settings.nanoidSeparators[index].char = char;
 							await this.plugin.saveSettings();
 						}));
 
@@ -161,7 +167,7 @@ export class UIDSettingTab extends PluginSettingTab {
 					.setButtonText('Add Group')
 					.setCta()
 					.onClick(async () => {
-						this.plugin.settings.nanoidSeparators.push({ char: '', position: -2 });
+						this.plugin.settings.nanoidSeparators.push({ char: '-', position: -2 });
 						await this.plugin.saveSettings();
 						this.display();
 					}));
@@ -309,7 +315,7 @@ export class UIDSettingTab extends PluginSettingTab {
 					const uidKey = this.plugin.settings.uidKey;
 					// Basic validation for the folder path input
 					if (!folderPath || folderPath.trim() === '') {
-						new Notice('Please specify a folder path in the \'Folder to clear uids from\' setting above first.');
+						new Notice("Please specify a folder path in the 'Folder to clear uids from' setting above first.");
 						return; // Prevent proceeding without a path
 					}
 

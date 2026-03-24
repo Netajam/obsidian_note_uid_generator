@@ -30,11 +30,22 @@ export function generateUID(plugin: UIDGenerator): string {
 		if (!plugin.uidCache.has(id)) {
 			return id;
 		}
-		console.warn(`[UIDGenerator] Collision detected for "${id}", retrying (${attempt + 1}/${MAX_COLLISION_RETRIES})`);
+		console.warn(`[UIDGenerator] Collision detected, retrying (${attempt + 1}/${MAX_COLLISION_RETRIES})`);
 	}
-	// Fallback: return the last generated ID anyway (extremely unlikely to reach here)
+	// All retries exhausted — notify the user and return the duplicate as last resort
 	const fallback = generateRawUID(plugin);
-	console.error(`[UIDGenerator] Failed to generate unique ID after ${MAX_COLLISION_RETRIES} attempts. Using potentially duplicate ID.`);
+	const { nanoidAlphabet, nanoidLength } = plugin.settings;
+	const totalCombinations = Math.pow(nanoidAlphabet.length, nanoidLength);
+	const combinationsStr = totalCombinations > 1e15
+		? totalCombinations.toExponential(2)
+		: totalCombinations.toLocaleString();
+	console.error(`[UIDGenerator] Failed to generate unique ID after ${MAX_COLLISION_RETRIES} attempts.`);
+	new Notice(
+		`Warning: Could not generate a unique ${plugin.settings.uidKey} after ${MAX_COLLISION_RETRIES} attempts. ` +
+		`Current settings allow ~${combinationsStr} combinations (alphabet: ${nanoidAlphabet.length} chars, length: ${nanoidLength}). ` +
+		`Consider increasing NanoID length or alphabet size.`,
+		15000
+	);
 	return fallback;
 }
 

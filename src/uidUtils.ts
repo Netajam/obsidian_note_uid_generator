@@ -1,6 +1,7 @@
 import { TFile, Notice } from 'obsidian';
 import { v4 as uuidv4 } from 'uuid';
 import { customAlphabet } from 'nanoid';
+import { ulid } from 'ulid';
 import UIDGenerator from './main';
 
 // Cache the nanoid generator to avoid recreating on every call
@@ -74,6 +75,9 @@ function generateRawUID(plugin: UIDGenerator): string {
 		}
 
 		return id;
+	}
+	if (plugin.settings.uidGenerator === 'ulid') {
+		return ulid();
 	}
 	return uuidv4();
 }

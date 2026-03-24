@@ -1,9 +1,9 @@
 {
 	"id": "note_uid_generator",
 	"name": "Note UID Generator",
-	"version": "1.1.0",
+	"version": "1.2.0",
 	"minAppVersion": "0.15.0",
-	"description": "Automatically or manually generates Unique IDs (UIDs) for notes and registers them in metadata (frontmatter).",
+	"description": "Automatically or manually generates Unique IDs (UUID, NanoID, or ULID) for notes and registers them in metadata (frontmatter).",
 	"author": "Valentin Pelletier",
 	"authorUrl": "https://github.com/Netajam",
 	"fundingUrl": "https://github.com/sponsors/Netajam",

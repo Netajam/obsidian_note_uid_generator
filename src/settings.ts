@@ -8,7 +8,7 @@ import { FolderExclusionModal } from './ui/FolderExclusionModal';
 export interface UIDGeneratorSettings {
 	uidKey: string;
 	autoGenerateUid: boolean;
-	uidGenerator: 'uuid' | 'nanoid';
+	uidGenerator: 'uuid' | 'nanoid' | 'ulid';
 	nanoidLength: number;
 	nanoidAlphabet: string;
 	nanoidSeparators: Array<{ char: string; position: number }>;
@@ -77,12 +77,13 @@ export class UIDSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName('Generator algorithm')
-			.setDesc('Choose between UUID (standard v4) or NanoID (customizable).')
+			.setDesc('Choose between UUID (standard v4), NanoID (customizable), or ULID (sortable, 26 chars).')
 			.addDropdown(dropdown => dropdown
 				.addOption('uuid', 'UUID')
 				.addOption('nanoid', 'NanoID')
+				.addOption('ulid', 'ULID')
 				.setValue(this.plugin.settings.uidGenerator)
-				.onChange(async (value: 'uuid' | 'nanoid') => {
+				.onChange(async (value: 'uuid' | 'nanoid' | 'ulid') => {
 					this.plugin.settings.uidGenerator = value;
 					await this.plugin.saveSettings();
 					this.display();

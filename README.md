@@ -2,10 +2,15 @@
 
 ## Overview
 
-The UID Generator plugin for Obsidian provides tools to create and manage unique identifiers (UIDs) for your notes directly within their frontmatter metadata. It allows for manual and automatic UID generation, customization of the metadata key and copy formats, and bulk operations within folders. This helps in creating stable, unique references for your notes, useful for linking, scripting, or external systems.
+The UID Generator plugin for Obsidian provides tools to create and manage unique identifiers (UIDs) for your notes directly within their frontmatter metadata. It supports multiple generator algorithms — **UUID** (v4), **NanoID** (customizable length, alphabet, and separators), and **ULID** (lexicographically sortable) — along with manual and automatic UID generation, customization of the metadata key and copy formats, and bulk operations within folders. This helps in creating stable, unique references for your notes, useful for linking, scripting, or external systems.
 
 ## Features
 
+*   **Multiple Generator Algorithms:**
+    *   **UUID** (v4) — Standard 36-character universally unique identifier.
+    *   **NanoID** — Customizable length, alphabet, and optional separator characters injected at specific positions.
+    *   **ULID** — 26-character, lexicographically sortable identifier that encodes creation time (useful for chronological ordering).
+*   **Duplicate Detection:** An in-memory cache of existing UIDs ensures newly generated IDs are unique, with automatic retry on collision.
 *   **Generate/Update UID:** Manually generate a new UID for the current note, optionally overwriting any existing UID under the configured key.
 *   **Create UID If Missing:** Manually generate a UID for the current note *only* if one doesn't already exist.
 *   **Remove UID:** Manually remove the UID from the current note's frontmatter.
@@ -65,6 +70,11 @@ Access the plugin settings from Obsidian Settings -> Community Plugins -> UID Ge
 
 *   **General:**
     *   **UID Metadata Key:** Set the frontmatter key name used for storing UIDs (default: `uid`). Avoid spaces.
+*   **UID Generator Type:**
+    *   **Generator Algorithm:** Choose between `UUID`, `NanoID`, or `ULID`.
+    *   **NanoID Length:** (NanoID only) Length of the generated ID, excluding separators. Min 4, max 128. (Default: 21)
+    *   **NanoID Alphabet:** (NanoID only) Characters used for ID generation. Must have at least 2 unique characters. (Default: `0-9A-Za-z`)
+    *   **NanoID Separator Groups:** (NanoID only) Inject characters at specific positions in the generated ID. Positions can be negative (count from end). Multiple groups supported.
 *   **Automatic UID Generation:**
     *   **Enable Automatic UID Generation:** Toggle the automatic creation of UIDs on/off.
     *   **Generation Scope:** Choose `Entire Vault` or `Specific Folder`.

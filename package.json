@@ -1,7 +1,7 @@
 {
 	"name": "note_uid_generator",
-	"version": "Obsidian plugin to generate uid for your notes",
-	"description": "",
+	"version": "1.1.0",
+	"description": "Obsidian plugin to generate uid for your notes",
 	"main": "src/main.js",
 	"scripts": {
 		"dev": "node esbuild.config.mjs",

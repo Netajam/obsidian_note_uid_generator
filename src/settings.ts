@@ -3,17 +3,22 @@ import UIDGenerator from './main';
 import { FolderSuggest } from './ui/FolderSuggest';
 import { ConfirmationModal } from './ui/ConfirmationModal';
 import { FolderExclusionModal } from './ui/FolderExclusionModal';
+import { FolderSelectionModal } from './ui/FolderSelectionModal';
+import { detectNodeId } from './uidUtils';
 
 // --- Settings Interface ---
 export interface UIDGeneratorSettings {
 	uidKey: string;
 	autoGenerateUid: boolean;
-	uidGenerator: 'uuid' | 'nanoid' | 'ulid';
+	uidGenerator: 'uuid' | 'nanoid' | 'ulid' | 'snowflake';
 	nanoidLength: number;
 	nanoidAlphabet: string;
 	nanoidSeparators: Array<{ char: string; position: number }>;
+	snowflakeNodeId: number;
+	snowflakeAutoDetectNodeId: boolean;
 	autoGenerationScope: 'vault' | 'folder';
-	autoGenerationFolder: string;
+	autoGenerationFolder: string;   // kept for migration from older versions
+	autoGenerationFolders: string[];
 	autoGenerationExclusions: string[];
 	folderToClear: string;
 	copyFormatString: string;
@@ -28,8 +33,11 @@ export const DEFAULT_SETTINGS: UIDGeneratorSettings = {
 	nanoidLength: 21,
 	nanoidAlphabet: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz',
 	nanoidSeparators: [],
+	snowflakeNodeId: 0,
+	snowflakeAutoDetectNodeId: true,
 	autoGenerationScope: 'vault',
 	autoGenerationFolder: '',
+	autoGenerationFolders: [],
 	autoGenerationExclusions: [],
 	folderToClear: '',
 	copyFormatString: '{title} - {uidKey}: {uid}',
@@ -77,13 +85,14 @@ export class UIDSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName('Generator algorithm')
-			.setDesc('Choose between UUID (standard v4), NanoID (customizable), or ULID (sortable, 26 chars).')
+			.setDesc('Choose between UUID (standard v4), NanoID (customizable), ULID (sortable, 26 chars), or Snowflake (64-bit, time-sortable, distributed).')
 			.addDropdown(dropdown => dropdown
 				.addOption('uuid', 'UUID')
 				.addOption('nanoid', 'NanoID')
 				.addOption('ulid', 'ULID')
+				.addOption('snowflake', 'Snowflake')
 				.setValue(this.plugin.settings.uidGenerator)
-				.onChange(async (value: 'uuid' | 'nanoid' | 'ulid') => {
+				.onChange(async (value: 'uuid' | 'nanoid' | 'ulid' | 'snowflake') => {
 					this.plugin.settings.uidGenerator = value;
 					await this.plugin.saveSettings();
 					this.display();
@@ -174,9 +183,50 @@ export class UIDSettingTab extends PluginSettingTab {
 					}));
 		}
 
+		if (this.plugin.settings.uidGenerator === 'snowflake') {
+			new Setting(containerEl).setName('Snowflake settings').setHeading();
+
+			new Setting(containerEl)
+				.setName('Auto-detect Node ID')
+				.setDesc('Derive Node ID from MAC address on desktop. Falls back to a random persistent value on mobile.')
+				.addToggle(toggle => toggle
+					.setValue(this.plugin.settings.snowflakeAutoDetectNodeId)
+					.onChange(async (value) => {
+						this.plugin.settings.snowflakeAutoDetectNodeId = value;
+						if (value) {
+							const detected = detectNodeId();
+							if (detected !== null) {
+								this.plugin.settings.snowflakeNodeId = detected;
+							}
+						}
+						await this.plugin.saveSettings();
+						this.display();
+					}));
+
+			new Setting(containerEl)
+				.setName('Node ID')
+				.setDesc('Machine identifier (0–1023, 10 bits). Distinguishes IDs generated on different devices.')
+				.addText(text => {
+					text.setValue(String(this.plugin.settings.snowflakeNodeId));
+					if (this.plugin.settings.snowflakeAutoDetectNodeId) {
+						text.setDisabled(true);
+					}
+					text.onChange(async (value) => {
+						const num = parseInt(value);
+						if (!isNaN(num) && num >= 0 && num <= 1023) {
+							this.plugin.settings.snowflakeNodeId = num;
+							await this.plugin.saveSettings();
+						}
+					});
+				});
+
+		}
+
 		// --- Automatic UID Generation ---
-		new Setting(containerEl).setName('Automatic uid generation').setHeading();
-		containerEl.createEl('p', { text: `Automatically add a ${this.plugin.settings.uidKey} to notes when they are created or opened, if they don't already have one.` }).addClass('setting-item-description');
+		new Setting(containerEl)
+			.setName('Automatic uid generation')
+			.setDesc(`Automatically add a ${this.plugin.settings.uidKey} to notes when they are created or opened, if they don't already have one.`)
+			.setHeading();
 
 		new Setting(containerEl)
 			.setName('Enable automatic uid generation')
@@ -194,7 +244,7 @@ export class UIDSettingTab extends PluginSettingTab {
 				.setName('Generation scope')
 				.addDropdown(dropdown => dropdown
 					.addOption('vault', 'Entire Vault')
-					.addOption('folder', 'Specific Folder')
+					.addOption('folder', 'Specific Folder(s)')
 					.setValue(this.plugin.settings.autoGenerationScope)
 					.onChange(async (value: 'vault' | 'folder') => {
 						this.plugin.settings.autoGenerationScope = value;
@@ -202,20 +252,26 @@ export class UIDSettingTab extends PluginSettingTab {
 						this.display();
 					}));
 
-			// Display folder input only if scope is 'folder'
+			// Display folder management only if scope is 'folder'
 			if (this.plugin.settings.autoGenerationScope === 'folder') {
 				new Setting(containerEl)
-					.setName('Target folder for auto-generation')
-					.setDesc('Generate uids only for notes in this folder (and subfolders).')
-					.addText(text => {
-						new FolderSuggest(this.app, text.inputEl);
-						text.setPlaceholder('Example: Notes/Inbox')
-							.setValue(this.plugin.settings.autoGenerationFolder)
-							.onChange(async (value) => {
-								this.plugin.settings.autoGenerationFolder = normalizePath(value.trim());
-								await this.plugin.saveSettings();
-							});
+					.setName('Target folders for auto-generation')
+					.setDesc('Generate uids only for notes in these folders (and subfolders).')
+					.addButton(button => button
+						.setButtonText('Manage folders')
+						.onClick(() => {
+							new FolderSelectionModal(this.app, this.plugin, () => this.display()).open();
+						}));
+
+				const folderListEl = containerEl.createEl('ul', { cls: 'uid-exclusion-list' });
+				if (this.plugin.settings.autoGenerationFolders.length > 0) {
+					const sortedFolders = [...this.plugin.settings.autoGenerationFolders].sort();
+					sortedFolders.forEach(folderPath => {
+						folderListEl.createEl('li', { text: folderPath });
 					});
+				} else {
+					folderListEl.createEl('li', { text: 'No target folders specified. Auto-generation is effectively disabled for folder scope.' });
+				}
 			}
 
 			// --- Excluded Folders Setting with Modal Button ---

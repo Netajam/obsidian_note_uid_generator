@@ -1,7 +1,7 @@
 import {
 	Editor, MarkdownView, Plugin, TFile, TFolder,
 	debounce, Menu, TAbstractFile, WorkspaceLeaf,
-	FileExplorerView
+	FileExplorerView, normalizePath
 } from 'obsidian';
 import { UIDGeneratorSettings, DEFAULT_SETTINGS, UIDSettingTab } from './settings';
 import * as commands from './commands';
@@ -14,6 +14,21 @@ export default class UIDGenerator extends Plugin {
 
 	async onload() {
 		await this.loadSettings();
+
+		// Initialize Snowflake Node ID if needed
+		if (this.settings.uidGenerator === 'snowflake' || this.settings.snowflakeAutoDetectNodeId) {
+			if (this.settings.snowflakeAutoDetectNodeId) {
+				const detected = uidUtils.detectNodeId();
+				if (detected !== null) {
+					this.settings.snowflakeNodeId = detected;
+					await this.saveSettings();
+				} else if (this.settings.snowflakeNodeId === 0) {
+					// Mobile fallback: generate a random node ID and persist it
+					this.settings.snowflakeNodeId = Math.floor(Math.random() * 1024);
+					await this.saveSettings();
+				}
+			}
+		}
 
 		// --- Ribbon Icon ---
 		this.addRibbonIcon('fingerprint', `Create ${this.settings.uidKey} if missing`, () => {
@@ -186,7 +201,7 @@ export default class UIDGenerator extends Plugin {
 			} else if (fileOrFolder instanceof TFile && fileOrFolder.extension === 'md') {
 				menu.addItem((item) => {
 					item
-						.setTitle(`Copy title + ${this.settings.uidKey}`) // Use specific handler for single file
+						.setTitle(`Copy title + ${this.settings.uidKey}`)
 						.setIcon('copy')
 						.onClick(() => commands.handleCopyTitleAndUidForFile(this, fileOrFolder));
 				});
@@ -204,7 +219,6 @@ export default class UIDGenerator extends Plugin {
 					item
 						.setTitle(`Copy titles + ${this.settings.uidKey}s for ${markdownFiles.length} selected`)
 						.setIcon('copy')
-						// Pass the filtered array of TFiles to the handler
 						.onClick(() => commands.handleCopyTitlesAndUidsForMultipleFiles(this, markdownFiles));
 				});
 			}
@@ -227,8 +241,21 @@ export default class UIDGenerator extends Plugin {
 		if (!Array.isArray(this.settings.nanoidSeparators)) {
 			this.settings.nanoidSeparators = [];
 		}
+		if (!Array.isArray(this.settings.autoGenerationFolders)) {
+			this.settings.autoGenerationFolders = [];
+		}
 		this.settings.copyFormatString = this.settings.copyFormatString || DEFAULT_SETTINGS.copyFormatString;
 		this.settings.copyFormatStringMissingUid = this.settings.copyFormatStringMissingUid || DEFAULT_SETTINGS.copyFormatStringMissingUid;
+
+		// Migrate single autoGenerationFolder → autoGenerationFolders array (one-time migration)
+		if (this.settings.autoGenerationFolder && this.settings.autoGenerationFolder.trim() !== '') {
+			const oldFolder = normalizePath(this.settings.autoGenerationFolder.trim());
+			if (oldFolder && !this.settings.autoGenerationFolders.includes(oldFolder)) {
+				this.settings.autoGenerationFolders.push(oldFolder);
+			}
+			this.settings.autoGenerationFolder = '';
+			await this.saveSettings();
+		}
 	}
 
 	async saveSettings() {

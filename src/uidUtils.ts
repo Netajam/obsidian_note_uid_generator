@@ -19,8 +19,72 @@ function getNanoidGenerator(alphabet: string, length: number): () => string {
 	return cachedNanoid;
 }
 
+// --- Snowflake ID Generator ---
+const SNOWFLAKE_NODE_ID_BITS = 10n;
+const SNOWFLAKE_SEQUENCE_BITS = 12n;
+const SNOWFLAKE_MAX_SEQUENCE = (1n << SNOWFLAKE_SEQUENCE_BITS) - 1n; // 4095
+const SNOWFLAKE_MAX_NODE_ID = (1n << SNOWFLAKE_NODE_ID_BITS) - 1n;   // 1023
+const SNOWFLAKE_NODE_ID_SHIFT = SNOWFLAKE_SEQUENCE_BITS;              // 12
+const SNOWFLAKE_TIMESTAMP_SHIFT = SNOWFLAKE_NODE_ID_BITS + SNOWFLAKE_SEQUENCE_BITS; // 22
+
+let snowflakeLastTimestamp: bigint = -1n;
+let snowflakeSequence: bigint = 0n;
+
+function generateSnowflakeID(nodeId: number): string {
+	const nodeIdBigInt = BigInt(nodeId) & SNOWFLAKE_MAX_NODE_ID;
+
+	let timestamp = BigInt(Date.now());
+
+	if (timestamp === snowflakeLastTimestamp) {
+		snowflakeSequence = (snowflakeSequence + 1n) & SNOWFLAKE_MAX_SEQUENCE;
+		if (snowflakeSequence === 0n) {
+			// Sequence exhausted for this millisecond — spin-wait for next ms
+			while (timestamp <= snowflakeLastTimestamp) {
+				timestamp = BigInt(Date.now());
+			}
+		}
+	} else {
+		snowflakeSequence = 0n;
+	}
+
+	snowflakeLastTimestamp = timestamp;
+
+	const id = (timestamp << SNOWFLAKE_TIMESTAMP_SHIFT)
+		| (nodeIdBigInt << SNOWFLAKE_NODE_ID_SHIFT)
+		| snowflakeSequence;
+
+	return id.toString();
+}
+
 /**
- * Generates a unique ID using UUID v4 or NanoID based on settings.
+ * Attempts to derive a stable 10-bit node ID (0-1023) from the machine's MAC address.
+ * Available on Electron (desktop). Returns null on mobile or if detection fails.
+ */
+export function detectNodeId(): number | null {
+	try {
+		// eslint-disable-next-line @typescript-eslint/no-var-requires
+		const os = require('os');
+		const interfaces = os.networkInterfaces();
+		for (const name of Object.keys(interfaces)) {
+			for (const iface of interfaces[name]) {
+				if (!iface.internal && iface.mac && iface.mac !== '00:00:00:00:00:00') {
+					const mac = iface.mac.replace(/:/g, '');
+					let hash = 0;
+					for (let i = 0; i < mac.length; i++) {
+						hash = ((hash << 5) - hash + mac.charCodeAt(i)) | 0;
+					}
+					return Math.abs(hash) % 1024;
+				}
+			}
+		}
+	} catch {
+		// os module not available (mobile)
+	}
+	return null;
+}
+
+/**
+ * Generates a unique ID using UUID v4, NanoID, ULID, or Snowflake based on settings.
  * @param plugin The UIDGenerator plugin instance (for settings).
  */
 const MAX_COLLISION_RETRIES = 10;
@@ -35,22 +99,33 @@ export function generateUID(plugin: UIDGenerator): string {
 	}
 	// All retries exhausted — notify the user and return the duplicate as last resort
 	const fallback = generateRawUID(plugin);
-	const { nanoidAlphabet, nanoidLength } = plugin.settings;
-	const totalCombinations = Math.pow(nanoidAlphabet.length, nanoidLength);
-	const combinationsStr = totalCombinations > 1e15
-		? totalCombinations.toExponential(2)
-		: totalCombinations.toLocaleString();
 	console.error(`[UIDGenerator] Failed to generate unique ID after ${MAX_COLLISION_RETRIES} attempts.`);
-	new Notice(
-		`Warning: Could not generate a unique ${plugin.settings.uidKey} after ${MAX_COLLISION_RETRIES} attempts. ` +
-		`Current settings allow ~${combinationsStr} combinations (alphabet: ${nanoidAlphabet.length} chars, length: ${nanoidLength}). ` +
-		`Consider increasing NanoID length or alphabet size.`,
-		15000
-	);
+
+	if (plugin.settings.uidGenerator === 'nanoid') {
+		const { nanoidAlphabet, nanoidLength } = plugin.settings;
+		const totalCombinations = Math.pow(nanoidAlphabet.length, nanoidLength);
+		const combinationsStr = totalCombinations > 1e15
+			? totalCombinations.toExponential(2)
+			: totalCombinations.toLocaleString();
+		new Notice(
+			`Warning: Could not generate a unique ${plugin.settings.uidKey} after ${MAX_COLLISION_RETRIES} attempts. ` +
+			`Current settings allow ~${combinationsStr} combinations (alphabet: ${nanoidAlphabet.length} chars, length: ${nanoidLength}). ` +
+			`Consider increasing NanoID length or alphabet size.`,
+			15000
+		);
+	} else {
+		new Notice(
+			`Warning: Could not generate a unique ${plugin.settings.uidKey} after ${MAX_COLLISION_RETRIES} attempts.`,
+			15000
+		);
+	}
 	return fallback;
 }
 
 function generateRawUID(plugin: UIDGenerator): string {
+	if (plugin.settings.uidGenerator === 'snowflake') {
+		return generateSnowflakeID(plugin.settings.snowflakeNodeId);
+	}
 	if (plugin.settings.uidGenerator === 'nanoid') {
 		const { nanoidAlphabet, nanoidLength, nanoidSeparators } = plugin.settings;
 		const nanoid = getNanoidGenerator(nanoidAlphabet, nanoidLength);

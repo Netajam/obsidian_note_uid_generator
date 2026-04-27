@@ -313,7 +313,9 @@ export async function handleAutoGenerateUid(plugin: UIDGenerator, file: TFile | 
 	// Check exclusions
 	if (plugin.settings.autoGenerationExclusions.some(ex => {
 		const normEx = normalizePath(ex.trim());
-		return normEx && (normalizedPath.startsWith(normEx + '/') || normalizedPath === normEx);
+		// '/' means the vault root — matches every file, consistent with
+		// how the vault root is treated in getFilesInFolder / clearUIDsInFolder.
+		return normEx && (normEx === '/' || normalizedPath.startsWith(normEx + '/') || normalizedPath === normEx);
 	})) {
 		return; // Excluded
 	}
@@ -367,7 +369,9 @@ export async function handleAddMissingUidsInScope(plugin: UIDGenerator): Promise
 			// 1. Check exclusions
 			if (plugin.settings.autoGenerationExclusions.some(ex => {
 				const normEx = normalizePath(ex.trim());
-				return normEx && (normalizedPath.startsWith(normEx + '/') || normalizedPath === normEx);
+				// '/' means the vault root — matches every file, consistent with
+				// how the vault root is treated in getFilesInFolder / clearUIDsInFolder.
+				return normEx && (normEx === '/' || normalizedPath.startsWith(normEx + '/') || normalizedPath === normEx);
 			})) {
 				isInScope = false; // Excluded
 			}

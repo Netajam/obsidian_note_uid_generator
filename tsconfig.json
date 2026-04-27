@@ -24,8 +24,14 @@
     "./src/typings"        // Your custom typings folder
   ],
   "include": [
-    "**/*.ts","**/*.d.ts", "src/typings/obsidian.d.ts" 
+    "**/*.ts","**/*.d.ts", "src/typings/obsidian.d.ts"
 
 
+  ],
+  "exclude": [
+    "node_modules",
+    "tests",
+    "src/**/*.test.ts",
+    "vitest.config.ts"
   ]
 }

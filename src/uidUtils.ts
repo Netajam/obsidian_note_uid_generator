@@ -188,7 +188,7 @@ export function getUIDFromFile(plugin: UIDGenerator, file: TFile | null): string
  * @param overwrite If true, will overwrite an existing UID. If false (default), will only set if missing.
  * @returns Promise<boolean> - True if UID was set/modified, False otherwise.
  */
-export async function setUID(plugin: UIDGenerator, file: TFile, uid: string, overwrite: boolean = false): Promise<boolean> {
+export async function setUID(plugin: UIDGenerator, file: TFile, uid: string, overwrite = false): Promise<boolean> {
 	if (!file || !(file instanceof TFile) || file.extension !== 'md') {
 		return false;
 	}

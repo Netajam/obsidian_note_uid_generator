@@ -1,5 +1,8 @@
 // src/typings/obsidian.d.ts
-import 'obsidian'; 
+// Mirrors Obsidian's own d.ts conventions for undocumented APIs (callbacks return `any`,
+// opaque ctx is `any`). Keep `any` here so the patches stay shape-compatible upstream.
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import 'obsidian';
 
 declare module 'obsidian' {
     interface Workspace {

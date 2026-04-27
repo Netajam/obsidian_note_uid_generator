@@ -131,7 +131,7 @@ export async function handleCopyTitlesAndUidsFromFolder(plugin: UIDGenerator, fo
 	const targetPath = folder.path;
 
 	for (const file of markdownFiles) {
-		let isInside = (targetPath === '/') ? file.path !== '/' : file.path.startsWith(targetPath + '/');
+		const isInside = (targetPath === '/') ? file.path !== '/' : file.path.startsWith(targetPath + '/');
 		if (isInside && !filesInFolder.some(f => f.path === file.path)) {
 			filesInFolder.push(file);
 		}
@@ -142,8 +142,7 @@ export async function handleCopyTitlesAndUidsFromFolder(plugin: UIDGenerator, fo
 		return;
 	}
 
-	let outputLines: string[] = [];
-	let filesWithUidCount = 0;
+	const outputLines: string[] = [];
 	const formatExists = plugin.settings.copyFormatString;
 	const formatMissing = plugin.settings.copyFormatStringMissingUid;
 
@@ -152,7 +151,6 @@ export async function handleCopyTitlesAndUidsFromFolder(plugin: UIDGenerator, fo
 		const uid = uidUtils.getUIDFromFile(plugin, file);
 		if (uid) {
 			outputLines.push(uidUtils.formatCopyString(plugin, formatExists, title, uid));
-			filesWithUidCount++;
 		} else {
 			outputLines.push(uidUtils.formatCopyString(plugin, formatMissing, title, null));
 		}
@@ -181,18 +179,15 @@ export async function handleCopyTitlesAndUidsForMultipleFiles(plugin: UIDGenerat
 		return;
 	}
 
-	let outputLines: string[] = [];
-	let filesWithUidCount = 0;
+	const outputLines: string[] = [];
 	const formatExists = plugin.settings.copyFormatString;
 	const formatMissing = plugin.settings.copyFormatStringMissingUid;
 
-	// Iterate through the provided array of TFiles
 	for (const file of files) {
 		const title = file.basename;
 		const uid = uidUtils.getUIDFromFile(plugin, file);
 		if (uid) {
 			outputLines.push(uidUtils.formatCopyString(plugin, formatExists, title, uid));
-			filesWithUidCount++;
 		} else {
 			outputLines.push(uidUtils.formatCopyString(plugin, formatMissing, title, null));
 		}
@@ -271,7 +266,7 @@ export async function handleClearUIDsInFolder(plugin: UIDGenerator, folderPath: 
 	const targetPath = folder.path;
 
 	for (const file of markdownFiles) {
-		let isInside = (targetPath === '/') ? file.path !== '/' : file.path.startsWith(targetPath + '/');
+		const isInside = (targetPath === '/') ? file.path !== '/' : file.path.startsWith(targetPath + '/');
 		if (isInside && !filesToProcess.some(f => f.path === file.path)) {
 			filesToProcess.push(file);
 		}

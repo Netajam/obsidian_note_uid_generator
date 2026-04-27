@@ -27,20 +27,35 @@ const SNOWFLAKE_MAX_NODE_ID = (1n << SNOWFLAKE_NODE_ID_BITS) - 1n;   // 1023
 const SNOWFLAKE_NODE_ID_SHIFT = SNOWFLAKE_SEQUENCE_BITS;              // 12
 const SNOWFLAKE_TIMESTAMP_SHIFT = SNOWFLAKE_NODE_ID_BITS + SNOWFLAKE_SEQUENCE_BITS; // 22
 
-let snowflakeLastTimestamp: bigint = -1n;
-let snowflakeSequence: bigint = 0n;
+let snowflakeLastTimestamp = -1n;
+let snowflakeSequence = 0n;
+
+// Bounds the spin-wait when the per-ms sequence overflows. 4096 ids/ms is
+// the absolute throughput; anything below that wraps within the same ms.
+const SNOWFLAKE_SPIN_WAIT_MAX_MS = 5n;
 
 function generateSnowflakeID(nodeId: number): string {
 	const nodeIdBigInt = BigInt(nodeId) & SNOWFLAKE_MAX_NODE_ID;
 
 	let timestamp = BigInt(Date.now());
 
-	if (timestamp === snowflakeLastTimestamp) {
+	// Clock moved backwards (NTP, suspend/resume): bump the stored timestamp
+	// forward by one ms instead of spinning. IDs stay monotonic across the
+	// jump at the cost of a small future-skew until wall time catches up.
+	if (timestamp < snowflakeLastTimestamp) {
+		timestamp = snowflakeLastTimestamp + 1n;
+		snowflakeSequence = 0n;
+	} else if (timestamp === snowflakeLastTimestamp) {
 		snowflakeSequence = (snowflakeSequence + 1n) & SNOWFLAKE_MAX_SEQUENCE;
 		if (snowflakeSequence === 0n) {
-			// Sequence exhausted for this millisecond — spin-wait for next ms
-			while (timestamp <= snowflakeLastTimestamp) {
+			// Sequence exhausted for this ms — wait for the next ms, but bound
+			// the spin so a stuck clock can't deadlock the plugin.
+			const spinDeadline = timestamp + SNOWFLAKE_SPIN_WAIT_MAX_MS;
+			while (timestamp <= snowflakeLastTimestamp && timestamp < spinDeadline) {
 				timestamp = BigInt(Date.now());
+			}
+			if (timestamp <= snowflakeLastTimestamp) {
+				timestamp = snowflakeLastTimestamp + 1n;
 			}
 		}
 	} else {
@@ -54,6 +69,12 @@ function generateSnowflakeID(nodeId: number): string {
 		| snowflakeSequence;
 
 	return id.toString();
+}
+
+/** Test-only: reset Snowflake module state between cases. */
+export function _resetSnowflakeState(): void {
+	snowflakeLastTimestamp = -1n;
+	snowflakeSequence = 0n;
 }
 
 /**

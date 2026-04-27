@@ -15,18 +15,18 @@ export default class UIDGenerator extends Plugin {
 	async onload() {
 		await this.loadSettings();
 
-		// Initialize Snowflake Node ID if needed
-		if (this.settings.uidGenerator === 'snowflake' || this.settings.snowflakeAutoDetectNodeId) {
-			if (this.settings.snowflakeAutoDetectNodeId) {
-				const detected = uidUtils.detectNodeId();
-				if (detected !== null) {
-					this.settings.snowflakeNodeId = detected;
-					await this.saveSettings();
-				} else if (this.settings.snowflakeNodeId === 0) {
-					// Mobile fallback: generate a random node ID and persist it
-					this.settings.snowflakeNodeId = Math.floor(Math.random() * 1024);
-					await this.saveSettings();
-				}
+		// Initialize Snowflake Node ID if auto-detect is on and the user actually
+		// uses Snowflake. Only writes settings when the value changes, so we
+		// don't churn disk on every plugin load.
+		if (this.settings.uidGenerator === 'snowflake' && this.settings.snowflakeAutoDetectNodeId) {
+			const detected = uidUtils.detectNodeId();
+			if (detected !== null && detected !== this.settings.snowflakeNodeId) {
+				this.settings.snowflakeNodeId = detected;
+				await this.saveSettings();
+			} else if (detected === null && this.settings.snowflakeNodeId === 0) {
+				// Mobile fallback: pick a random persistent node ID once.
+				this.settings.snowflakeNodeId = Math.floor(Math.random() * 1024);
+				await this.saveSettings();
 			}
 		}
 
@@ -247,7 +247,8 @@ export default class UIDGenerator extends Plugin {
 		this.settings.copyFormatString = this.settings.copyFormatString || DEFAULT_SETTINGS.copyFormatString;
 		this.settings.copyFormatStringMissingUid = this.settings.copyFormatStringMissingUid || DEFAULT_SETTINGS.copyFormatStringMissingUid;
 
-		// Migrate single autoGenerationFolder → autoGenerationFolders array (one-time migration)
+		// One-shot migration from the legacy single-folder string to the array.
+		// Clears the old field so subsequent loads no-op without rewriting settings.
 		if (this.settings.autoGenerationFolder && this.settings.autoGenerationFolder.trim() !== '') {
 			const oldFolder = normalizePath(this.settings.autoGenerationFolder.trim());
 			if (oldFolder && !this.settings.autoGenerationFolders.includes(oldFolder)) {

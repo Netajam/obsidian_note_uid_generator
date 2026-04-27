@@ -2,7 +2,7 @@
 
 ## Overview
 
-The UID Generator plugin for Obsidian provides tools to create and manage unique identifiers (UIDs) for your notes directly within their frontmatter metadata. It supports multiple generator algorithms — **UUID** (v4), **NanoID** (customizable length, alphabet, and separators), and **ULID** (lexicographically sortable) — along with manual and automatic UID generation, customization of the metadata key and copy formats, and bulk operations within folders. This helps in creating stable, unique references for your notes, useful for linking, scripting, or external systems.
+The UID Generator plugin for Obsidian provides tools to create and manage unique identifiers (UIDs) for your notes directly within their frontmatter metadata. It supports multiple generator algorithms — **UUID** (v4), **NanoID** (customizable length, alphabet, and separators), **ULID** (lexicographically sortable), and **Snowflake** (64-bit time-sortable distributed ID) — along with manual and automatic UID generation, customization of the metadata key and copy formats, and bulk operations within folders. This helps in creating stable, unique references for your notes, useful for linking, scripting, or external systems.
 
 ## Features
 
@@ -10,6 +10,7 @@ The UID Generator plugin for Obsidian provides tools to create and manage unique
     *   **UUID** (v4) — Standard 36-character universally unique identifier.
     *   **NanoID** — Customizable length, alphabet, and optional separator characters injected at specific positions.
     *   **ULID** — 26-character, lexicographically sortable identifier that encodes creation time (useful for chronological ordering).
+    *   **Snowflake** — 64-bit time-sortable numeric ID (41-bit Unix timestamp + 10-bit node ID + 12-bit per-ms sequence). Node ID is auto-derived from the machine's MAC address on desktop and falls back to a random persistent value on mobile; both can be overridden manually.
 *   **Duplicate Detection:** An in-memory cache of existing UIDs ensures newly generated IDs are unique, with automatic retry on collision.
 *   **Generate/Update UID:** Manually generate a new UID for the current note, optionally overwriting any existing UID under the configured key.
 *   **Create UID If Missing:** Manually generate a UID for the current note *only* if one doesn't already exist.
@@ -17,7 +18,7 @@ The UID Generator plugin for Obsidian provides tools to create and manage unique
 *   **Copy UID:** Copy the UID of the current note to the clipboard.
 *   **Copy title + UID:** Copy the title and UID of the current note (or multiple selected notes) to the clipboard, using a customizable format.
 *   **Automatic UID Generation:** Automatically add a UID to notes upon creation or opening if they lack one.
-    *   Configurable scope (entire vault or specific folder).
+    *   Configurable scope (entire vault or one or more specific folders).
     *   Ability to exclude specific folders.
     *   Never overwrites existing UIDs during automatic generation.
 *   **Clear UIDs in Folder:** Remove all UIDs (using the configured key) from notes within a specified folder and its subfolders, with confirmation.
@@ -71,14 +72,16 @@ Access the plugin settings from Obsidian Settings -> Community Plugins -> UID Ge
 *   **General:**
     *   **UID Metadata Key:** Set the frontmatter key name used for storing UIDs (default: `uid`). Avoid spaces.
 *   **UID Generator Type:**
-    *   **Generator Algorithm:** Choose between `UUID`, `NanoID`, or `ULID`.
+    *   **Generator Algorithm:** Choose between `UUID`, `NanoID`, `ULID`, or `Snowflake`.
     *   **NanoID Length:** (NanoID only) Length of the generated ID, excluding separators. Min 4, max 128. (Default: 21)
     *   **NanoID Alphabet:** (NanoID only) Characters used for ID generation. Must have at least 2 unique characters. (Default: `0-9A-Za-z`)
     *   **NanoID Separator Groups:** (NanoID only) Inject characters at specific positions in the generated ID. Positions can be negative (count from end). Multiple groups supported.
+    *   **Auto-detect Node ID:** (Snowflake only) Derive the 10-bit node ID from the machine's MAC address. On Obsidian Mobile (no Node `os` module), a random persistent node ID is picked once and reused.
+    *   **Node ID:** (Snowflake only) Manual override (0–1023). Editable when auto-detect is off.
 *   **Automatic UID Generation:**
     *   **Enable Automatic UID Generation:** Toggle the automatic creation of UIDs on/off.
-    *   **Generation Scope:** Choose `Entire Vault` or `Specific Folder`.
-    *   **Target Folder for Auto-Generation:** (Visible if Scope is 'Specific Folder') Enter the path to the folder where auto-generation should occur. Uses folder path suggestions.
+    *   **Generation Scope:** Choose `Entire Vault` or `Specific Folder(s)`.
+    *   **Target Folders for Auto-Generation:** (Visible if Scope is 'Specific Folder(s)') Click "Manage folders" to open a modal where you can search, add, or remove folders that should be in scope for auto-generation. Notes in any of the listed folders (including subfolders) are eligible. Settings created with previous versions of the plugin are migrated automatically.
     *   **Excluded Folders:** Click "Manage Exclusions" to open a modal where you can search, add, or remove folders that should be ignored by automatic generation. The current list is displayed below the button.
 *   **Copy Format:**
     *   **Format (UID exists):** Define the template for copied text when a UID is present. Use placeholders `{title}`, `{uid}`, `{uidKey}`. (Default: `{title} - {uidKey}: {uid}`)
@@ -94,7 +97,7 @@ Access the plugin settings from Obsidian Settings -> Community Plugins -> UID Ge
 
 *   **Ensure a Note Has a Unique ID:** Open the note, open the command palette, run `UID Generator: Create uid if missing`.
 *   **Link Using UID:** Open a note, run `UID Generator: Copy uid`, paste the UID into another note's link or alias.
-*   **Auto-Assign IDs to New Notes in Inbox:** Enable Automatic Generation, set Scope to 'Specific Folder', set Target Folder to `Inbox`.
+*   **Auto-Assign IDs to New Notes in Inbox:** Enable Automatic Generation, set Scope to 'Specific Folder(s)', click "Manage folders" and add `Inbox` (and any other target folders).
 *   **Clean Up Old IDs:** Set 'Folder to clear UIDs from' to `Archives/Old Project`, click 'Clear UIDs Now', confirm.
 *   **Get List of Project Notes with IDs:** Right-click the `Projects/Current Project` folder, select `Copy titles+uids from "Current Project"`.
 
@@ -123,6 +126,7 @@ For developers interested in contributing:
     *   `FolderSuggest.ts`
     *   `ConfirmationModal.ts`
     *   `FolderExclusionModal.ts`
+    *   `FolderSelectionModal.ts`
 *   `src/obsidian.d.ts`: Contains TypeScript declarations for undocumented Obsidian APIs used (like `files-menu`).
 
 ## Contributing

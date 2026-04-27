@@ -19,8 +19,124 @@ function getNanoidGenerator(alphabet: string, length: number): () => string {
 	return cachedNanoid;
 }
 
+// --- Snowflake ID Generator ---
+const SNOWFLAKE_NODE_ID_BITS = 10n;
+const SNOWFLAKE_SEQUENCE_BITS = 12n;
+const SNOWFLAKE_MAX_SEQUENCE = (1n << SNOWFLAKE_SEQUENCE_BITS) - 1n; // 4095
+const SNOWFLAKE_MAX_NODE_ID = (1n << SNOWFLAKE_NODE_ID_BITS) - 1n;   // 1023
+const SNOWFLAKE_NODE_ID_SHIFT = SNOWFLAKE_SEQUENCE_BITS;              // 12
+const SNOWFLAKE_TIMESTAMP_SHIFT = SNOWFLAKE_NODE_ID_BITS + SNOWFLAKE_SEQUENCE_BITS; // 22
+
+let snowflakeLastTimestamp = -1n;
+let snowflakeSequence = 0n;
+
+// Bounds the spin-wait when the per-ms sequence overflows. 4096 ids/ms is
+// the absolute throughput; anything below that wraps within the same ms.
+const SNOWFLAKE_SPIN_WAIT_MAX_MS = 5n;
+
+function generateSnowflakeID(nodeId: number): string {
+	const nodeIdBigInt = BigInt(nodeId) & SNOWFLAKE_MAX_NODE_ID;
+
+	let timestamp = BigInt(Date.now());
+
+	// Clock moved backwards (NTP, suspend/resume): bump the stored timestamp
+	// forward by one ms instead of spinning. IDs stay monotonic across the
+	// jump at the cost of a small future-skew until wall time catches up.
+	if (timestamp < snowflakeLastTimestamp) {
+		timestamp = snowflakeLastTimestamp + 1n;
+		snowflakeSequence = 0n;
+	} else if (timestamp === snowflakeLastTimestamp) {
+		snowflakeSequence = (snowflakeSequence + 1n) & SNOWFLAKE_MAX_SEQUENCE;
+		if (snowflakeSequence === 0n) {
+			// Sequence exhausted for this ms — wait for the next ms, but bound
+			// the spin so a stuck clock can't deadlock the plugin.
+			const spinDeadline = timestamp + SNOWFLAKE_SPIN_WAIT_MAX_MS;
+			while (timestamp <= snowflakeLastTimestamp && timestamp < spinDeadline) {
+				timestamp = BigInt(Date.now());
+			}
+			if (timestamp <= snowflakeLastTimestamp) {
+				timestamp = snowflakeLastTimestamp + 1n;
+			}
+		}
+	} else {
+		snowflakeSequence = 0n;
+	}
+
+	snowflakeLastTimestamp = timestamp;
+
+	const id = (timestamp << SNOWFLAKE_TIMESTAMP_SHIFT)
+		| (nodeIdBigInt << SNOWFLAKE_NODE_ID_SHIFT)
+		| snowflakeSequence;
+
+	return id.toString();
+}
+
+/** Test-only: reset Snowflake module state between cases. */
+export function _resetSnowflakeState(): void {
+	snowflakeLastTimestamp = -1n;
+	snowflakeSequence = 0n;
+}
+
 /**
- * Generates a unique ID using UUID v4 or NanoID based on settings.
+ * Resolves the Node ID auto-detect should produce for the given stored value.
+ * Returns the new value to persist, or null if the stored value is already
+ * correct (or no detection / fallback applies).
+ *
+ * - Desktop: returns the MAC-derived ID when it differs from `stored`.
+ * - Mobile (no MAC): returns a random value in 1–1023 when `stored === 0`,
+ *   so the random fallback is picked once and then preserved across reloads.
+ *
+ * The random range deliberately excludes 0: `stored === 0` is the sentinel
+ * for "not yet picked". If the random pick could land on 0, it would be
+ * indistinguishable from the unset state and re-roll on every plugin load,
+ * breaking ID stability across sessions.
+ *
+ * The `detect` parameter is for unit testing. Production callers omit it
+ * and get the real MAC-based detector.
+ */
+export function resolveAutoDetectedNodeId(
+	stored: number,
+	detect: () => number | null = detectNodeId,
+): number | null {
+	const detected = detect();
+	if (detected !== null) {
+		return detected !== stored ? detected : null;
+	}
+	if (stored === 0) {
+		return Math.floor(Math.random() * 1023) + 1;
+	}
+	return null;
+}
+
+/**
+ * Attempts to derive a stable 10-bit node ID (0-1023) from the machine's MAC address.
+ * Available on Electron (desktop). Returns null on mobile or if detection fails.
+ */
+export function detectNodeId(): number | null {
+	try {
+		// eslint-disable-next-line @typescript-eslint/no-var-requires
+		const os = require('os');
+		const interfaces = os.networkInterfaces();
+		for (const name of Object.keys(interfaces)) {
+			for (const iface of interfaces[name]) {
+				if (!iface.internal && iface.mac && iface.mac !== '00:00:00:00:00:00') {
+					const mac = iface.mac.replace(/:/g, '');
+					let hash = 0;
+					for (let i = 0; i < mac.length; i++) {
+						hash = ((hash << 5) - hash + mac.charCodeAt(i)) | 0;
+					}
+					return Math.abs(hash) % 1024;
+				}
+			}
+		}
+	} catch {
+		// os module not available (mobile)
+	}
+	return null;
+}
+
+/**
+ * Generates a unique ID using UUID v4, NanoID, ULID, or Snowflake based on settings.
  * @param plugin The UIDGenerator plugin instance (for settings).
  */
 const MAX_COLLISION_RETRIES = 10;
@@ -35,22 +151,34 @@ export function generateUID(plugin: UIDGenerator): string {
 	}
 	// All retries exhausted — notify the user and return the duplicate as last resort
 	const fallback = generateRawUID(plugin);
-	const { nanoidAlphabet, nanoidLength } = plugin.settings;
-	const totalCombinations = Math.pow(nanoidAlphabet.length, nanoidLength);
-	const combinationsStr = totalCombinations > 1e15
-		? totalCombinations.toExponential(2)
-		: totalCombinations.toLocaleString();
 	console.error(`[UIDGenerator] Failed to generate unique ID after ${MAX_COLLISION_RETRIES} attempts.`);
-	new Notice(
-		`Warning: Could not generate a unique ${plugin.settings.uidKey} after ${MAX_COLLISION_RETRIES} attempts. ` +
-		`Current settings allow ~${combinationsStr} combinations (alphabet: ${nanoidAlphabet.length} chars, length: ${nanoidLength}). ` +
-		`Consider increasing NanoID length or alphabet size.`,
-		15000
-	);
+
+	if (plugin.settings.uidGenerator === 'nanoid') {
+		const { nanoidAlphabet, nanoidLength } = plugin.settings;
+		const totalCombinations = Math.pow(nanoidAlphabet.length, nanoidLength);
+		const combinationsStr = totalCombinations > 1e15
+			? totalCombinations.toExponential(2)
+			: totalCombinations.toLocaleString();
+		new Notice(
+			`Warning: Could not generate a unique ${plugin.settings.uidKey} after ${MAX_COLLISION_RETRIES} attempts. ` +
+			`Current settings allow ~${combinationsStr} combinations (alphabet: ${nanoidAlphabet.length} chars, length: ${nanoidLength}). ` +
+			`Consider increasing NanoID length or alphabet size.`,
+			15000
+		);
+	} else {
+		new Notice(
+			`Warning: Could not generate a unique ${plugin.settings.uidKey} after ${MAX_COLLISION_RETRIES} attempts.`,
+			15000
+		);
+	}
 	return fallback;
 }
 
 function generateRawUID(plugin: UIDGenerator): string {
+	if (plugin.settings.uidGenerator === 'snowflake') {
+		const effective = plugin.settings.snowflakeNodeIdOverride ?? plugin.settings.snowflakeNodeId;
+		return generateSnowflakeID(effective);
+	}
 	if (plugin.settings.uidGenerator === 'nanoid') {
 		const { nanoidAlphabet, nanoidLength, nanoidSeparators } = plugin.settings;
 		const nanoid = getNanoidGenerator(nanoidAlphabet, nanoidLength);

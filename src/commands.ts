@@ -317,9 +317,16 @@ export async function handleAutoGenerateUid(plugin: UIDGenerator, file: TFile | 
 
 	// Check scope
 	if (plugin.settings.autoGenerationScope === 'folder') {
-		const normScope = normalizePath(plugin.settings.autoGenerationFolder.trim());
-		if (!normScope || !(normalizedPath.startsWith(normScope + '/') || file.parent?.path === normScope)) {
-			return; // Outside scope
+		const folders = plugin.settings.autoGenerationFolders;
+		if (folders.length === 0) {
+			return; // No folders configured
+		}
+		const isInAnyFolder = folders.some(f => {
+			const normScope = normalizePath(f.trim());
+			return normScope && (normalizedPath.startsWith(normScope + '/') || file.parent?.path === normScope);
+		});
+		if (!isInAnyFolder) {
+			return; // Outside all scoped folders
 		}
 	}
 
@@ -373,9 +380,17 @@ export async function handleAddMissingUidsInScope(plugin: UIDGenerator): Promise
 
 			// 2. Check scope if not already excluded
 			if (isInScope && plugin.settings.autoGenerationScope === 'folder') {
-				const normScope = normalizePath(plugin.settings.autoGenerationFolder.trim());
-				if (!normScope || !(normalizedPath.startsWith(normScope + '/') || file.parent?.path === normScope)) {
-					isInScope = false; // Outside scope folder
+				const folders = plugin.settings.autoGenerationFolders;
+				if (folders.length === 0) {
+					isInScope = false;
+				} else {
+					const isInAnyFolder = folders.some(f => {
+						const normScope = normalizePath(f.trim());
+						return normScope && (normalizedPath.startsWith(normScope + '/') || file.parent?.path === normScope);
+					});
+					if (!isInAnyFolder) {
+						isInScope = false;
+					}
 				}
 			}
 

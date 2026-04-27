@@ -1,7 +1,7 @@
 import {
 	Editor, MarkdownView, Plugin, TFile, TFolder,
 	debounce, Menu, TAbstractFile, WorkspaceLeaf,
-	FileExplorerView
+	FileExplorerView, normalizePath
 } from 'obsidian';
 import { UIDGeneratorSettings, DEFAULT_SETTINGS, UIDSettingTab } from './settings';
 import * as commands from './commands';
@@ -14,6 +14,17 @@ export default class UIDGenerator extends Plugin {
 
 	async onload() {
 		await this.loadSettings();
+
+		// Refresh the cached machine Node ID for Snowflake on plugin load.
+		// The override (if any) takes precedence at generation time, but we
+		// still want the machine value to reflect the current hardware.
+		if (this.settings.uidGenerator === 'snowflake') {
+			const next = uidUtils.resolveAutoDetectedNodeId(this.settings.snowflakeNodeId);
+			if (next !== null) {
+				this.settings.snowflakeNodeId = next;
+				await this.saveSettings();
+			}
+		}
 
 		// --- Ribbon Icon ---
 		this.addRibbonIcon('fingerprint', `Create ${this.settings.uidKey} if missing`, () => {
@@ -186,7 +197,7 @@ export default class UIDGenerator extends Plugin {
 			} else if (fileOrFolder instanceof TFile && fileOrFolder.extension === 'md') {
 				menu.addItem((item) => {
 					item
-						.setTitle(`Copy title + ${this.settings.uidKey}`) // Use specific handler for single file
+						.setTitle(`Copy title + ${this.settings.uidKey}`)
 						.setIcon('copy')
 						.onClick(() => commands.handleCopyTitleAndUidForFile(this, fileOrFolder));
 				});
@@ -204,7 +215,6 @@ export default class UIDGenerator extends Plugin {
 					item
 						.setTitle(`Copy titles + ${this.settings.uidKey}s for ${markdownFiles.length} selected`)
 						.setIcon('copy')
-						// Pass the filtered array of TFiles to the handler
 						.onClick(() => commands.handleCopyTitlesAndUidsForMultipleFiles(this, markdownFiles));
 				});
 			}
@@ -227,8 +237,39 @@ export default class UIDGenerator extends Plugin {
 		if (!Array.isArray(this.settings.nanoidSeparators)) {
 			this.settings.nanoidSeparators = [];
 		}
+		if (!Array.isArray(this.settings.autoGenerationFolders)) {
+			this.settings.autoGenerationFolders = [];
+		}
 		this.settings.copyFormatString = this.settings.copyFormatString || DEFAULT_SETTINGS.copyFormatString;
 		this.settings.copyFormatStringMissingUid = this.settings.copyFormatStringMissingUid || DEFAULT_SETTINGS.copyFormatStringMissingUid;
+
+		// One-shot migration from the legacy single-folder string to the array.
+		// Clears the old field so subsequent loads no-op without rewriting settings.
+		if (this.settings.autoGenerationFolder && this.settings.autoGenerationFolder.trim() !== '') {
+			const oldFolder = normalizePath(this.settings.autoGenerationFolder.trim());
+			if (oldFolder && !this.settings.autoGenerationFolders.includes(oldFolder)) {
+				this.settings.autoGenerationFolders.push(oldFolder);
+			}
+			this.settings.autoGenerationFolder = '';
+			await this.saveSettings();
+		}
+
+		// One-shot migration from the legacy Snowflake auto-detect toggle to
+		// the override field. Earlier PR builds stored a manual Node ID in
+		// `snowflakeNodeId` with `snowflakeAutoDetectNodeId === false`; carry
+		// that intent forward as a custom override so the user's pick survives.
+		if (typeof this.settings.snowflakeAutoDetectNodeId === 'boolean') {
+			if (
+				this.settings.snowflakeAutoDetectNodeId === false
+				&& this.settings.snowflakeNodeIdOverride === null
+				&& this.settings.snowflakeNodeId > 0
+			) {
+				this.settings.snowflakeNodeIdOverride = this.settings.snowflakeNodeId;
+				this.settings.snowflakeNodeId = 0; // re-detect on next load
+			}
+			delete this.settings.snowflakeAutoDetectNodeId;
+			await this.saveSettings();
+		}
 	}
 
 	async saveSettings() {

@@ -59,7 +59,7 @@ describe('handleAutoGenerateUid — settings-driven decisions', () => {
 			settings: {
 				autoGenerateUid: true,
 				autoGenerationScope: 'folder',
-				autoGenerationFolder: 'Notes',
+				autoGenerationFolders: ['Notes'],
 			},
 			filePath: 'Notes/foo.md',
 			shouldGenerate: true,
@@ -69,7 +69,7 @@ describe('handleAutoGenerateUid — settings-driven decisions', () => {
 			settings: {
 				autoGenerateUid: true,
 				autoGenerationScope: 'folder',
-				autoGenerationFolder: 'Notes',
+				autoGenerationFolders: ['Notes'],
 			},
 			filePath: 'Notes/sub/deep/foo.md',
 			shouldGenerate: true,
@@ -79,17 +79,17 @@ describe('handleAutoGenerateUid — settings-driven decisions', () => {
 			settings: {
 				autoGenerateUid: true,
 				autoGenerationScope: 'folder',
-				autoGenerationFolder: 'Notes',
+				autoGenerationFolders: ['Notes'],
 			},
 			filePath: 'OtherFolder/foo.md',
 			shouldGenerate: false,
 		},
 		{
-			name: 'scope=folder with empty folder setting → no-op (defensive)',
+			name: 'scope=folder with empty folders array → no-op (defensive)',
 			settings: {
 				autoGenerateUid: true,
 				autoGenerationScope: 'folder',
-				autoGenerationFolder: '',
+				autoGenerationFolders: [],
 			},
 			filePath: 'foo.md',
 			shouldGenerate: false,
@@ -129,7 +129,7 @@ describe('handleAutoGenerateUid — settings-driven decisions', () => {
 			settings: {
 				autoGenerateUid: true,
 				autoGenerationScope: 'folder',
-				autoGenerationFolder: 'Notes',
+				autoGenerationFolders: ['Notes'],
 				autoGenerationExclusions: ['Notes/private'],
 			},
 			filePath: 'Notes/private/secret.md',
@@ -140,7 +140,7 @@ describe('handleAutoGenerateUid — settings-driven decisions', () => {
 			settings: {
 				autoGenerateUid: true,
 				autoGenerationScope: 'folder',
-				autoGenerationFolder: 'Notes',
+				autoGenerationFolders: ['Notes'],
 				autoGenerationExclusions: ['Notes/private'],
 			},
 			filePath: 'Notes/public/ok.md',
@@ -170,6 +170,52 @@ describe('handleAutoGenerateUid — settings-driven decisions', () => {
 			}
 		});
 	}
+});
+
+describe('handleAutoGenerateUid — multi-folder scope', () => {
+	async function runOn(
+		filePath: string,
+		folders: string[],
+	): Promise<string | undefined> {
+		const app = makeFakeApp({
+			files: [{ path: filePath }],
+			settings: {
+				autoGenerateUid: true,
+				autoGenerationScope: 'folder',
+				autoGenerationFolders: folders,
+			},
+		});
+		await handleAutoGenerateUid(app.plugin, app.files[0]);
+		return app.frontmatterByPath.get(filePath)?.uid as string | undefined;
+	}
+
+	it('generates when the file is in any of the configured folders', async () => {
+		expect(await runOn('Notes/a.md', ['Notes', 'Journal'])).toMatch(UUID_RE);
+		expect(await runOn('Journal/b.md', ['Notes', 'Journal'])).toMatch(UUID_RE);
+	});
+
+	it('skips files that are in none of the configured folders', async () => {
+		expect(await runOn('Other/a.md', ['Notes', 'Journal'])).toBeUndefined();
+	});
+
+	it('matches files in nested subfolders of a configured folder', async () => {
+		expect(await runOn('Notes/sub/deep/a.md', ['Notes'])).toMatch(UUID_RE);
+	});
+
+	it('treats an empty folders array as out-of-scope for every file', async () => {
+		expect(await runOn('Notes/a.md', [])).toBeUndefined();
+		expect(await runOn('a.md', [])).toBeUndefined();
+	});
+
+	it('strips surrounding whitespace from folder entries', async () => {
+		expect(await runOn('Notes/a.md', ['  Notes  '])).toMatch(UUID_RE);
+	});
+
+	it('ignores blank/whitespace-only folder entries instead of matching everything', async () => {
+		// If an empty string accidentally matched as a prefix, every file would be in scope.
+		// The guard `normScope && (...)` should keep blank entries inert.
+		expect(await runOn('Other/a.md', ['', '   '])).toBeUndefined();
+	});
 });
 
 describe('handleAutoGenerateUid — exclusion list edge cases', () => {
@@ -247,7 +293,7 @@ describe('settings that effectively exclude every file', () => {
 			settings: {
 				autoGenerateUid: true,
 				autoGenerationScope: 'folder',
-				autoGenerationFolder: 'NonExistent',
+				autoGenerationFolders: ['NonExistent'],
 			},
 		});
 
@@ -271,7 +317,7 @@ describe('settings that effectively exclude every file', () => {
 			settings: {
 				autoGenerateUid: true,
 				autoGenerationScope: 'folder',
-				autoGenerationFolder: 'Notes',
+				autoGenerationFolders: ['Notes'],
 				autoGenerationExclusions: ['Notes'], // cancels out the scope
 			},
 		});
@@ -294,7 +340,7 @@ describe('settings that effectively exclude every file', () => {
 			],
 			settings: {
 				autoGenerationScope: 'folder',
-				autoGenerationFolder: 'NonExistent',
+				autoGenerationFolders: ['NonExistent'],
 			},
 		});
 
@@ -350,7 +396,7 @@ describe('parity — handleAutoGenerateUid vs handleAddMissingUidsInScope', () =
 			settings: {
 				autoGenerateUid: true,
 				autoGenerationScope: 'folder',
-				autoGenerationFolder: 'Notes',
+				autoGenerationFolders: ['Notes'],
 			},
 			files: ['root.md', 'Notes/a.md', 'Notes/sub/b.md', 'Other/c.md'],
 		},
@@ -368,7 +414,7 @@ describe('parity — handleAutoGenerateUid vs handleAddMissingUidsInScope', () =
 			settings: {
 				autoGenerateUid: true,
 				autoGenerationScope: 'folder',
-				autoGenerationFolder: 'Notes',
+				autoGenerationFolders: ['Notes'],
 				autoGenerationExclusions: ['Notes/private'],
 			},
 			files: [
@@ -433,7 +479,7 @@ describe('handleAddMissingUidsInScope — bulk decision over many files', () => 
 			],
 			settings: {
 				autoGenerationScope: 'folder',
-				autoGenerationFolder: 'Notes',
+				autoGenerationFolders: ['Notes'],
 				autoGenerationExclusions: ['Notes/private'],
 			},
 		});

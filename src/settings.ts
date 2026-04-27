@@ -3,17 +3,23 @@ import UIDGenerator from './main';
 import { FolderSuggest } from './ui/FolderSuggest';
 import { ConfirmationModal } from './ui/ConfirmationModal';
 import { FolderExclusionModal } from './ui/FolderExclusionModal';
+import { FolderSelectionModal } from './ui/FolderSelectionModal';
+import { detectNodeId, resolveAutoDetectedNodeId } from './uidUtils';
 
 // --- Settings Interface ---
 export interface UIDGeneratorSettings {
 	uidKey: string;
 	autoGenerateUid: boolean;
-	uidGenerator: 'uuid' | 'nanoid' | 'ulid';
+	uidGenerator: 'uuid' | 'nanoid' | 'ulid' | 'snowflake';
 	nanoidLength: number;
 	nanoidAlphabet: string;
 	nanoidSeparators: Array<{ char: string; position: number }>;
+	snowflakeNodeId: number;                       // machine-detected (or random mobile fallback)
+	snowflakeNodeIdOverride: number | null;        // when set, overrides the machine value
+	snowflakeAutoDetectNodeId?: boolean;           // legacy — kept only for migration from earlier PR builds
 	autoGenerationScope: 'vault' | 'folder';
-	autoGenerationFolder: string;
+	autoGenerationFolder: string;   // kept for migration from older versions
+	autoGenerationFolders: string[];
 	autoGenerationExclusions: string[];
 	folderToClear: string;
 	copyFormatString: string;
@@ -28,8 +34,11 @@ export const DEFAULT_SETTINGS: UIDGeneratorSettings = {
 	nanoidLength: 21,
 	nanoidAlphabet: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz',
 	nanoidSeparators: [],
+	snowflakeNodeId: 0,
+	snowflakeNodeIdOverride: null,
 	autoGenerationScope: 'vault',
 	autoGenerationFolder: '',
+	autoGenerationFolders: [],
 	autoGenerationExclusions: [],
 	folderToClear: '',
 	copyFormatString: '{title} - {uidKey}: {uid}',
@@ -77,13 +86,14 @@ export class UIDSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName('Generator algorithm')
-			.setDesc('Choose between UUID (standard v4), NanoID (customizable), or ULID (sortable, 26 chars).')
+			.setDesc('Choose between UUID (standard v4), NanoID (customizable), ULID (sortable, 26 chars), or Snowflake (64-bit, time-sortable, distributed).')
 			.addDropdown(dropdown => dropdown
 				.addOption('uuid', 'UUID')
 				.addOption('nanoid', 'NanoID')
 				.addOption('ulid', 'ULID')
+				.addOption('snowflake', 'Snowflake')
 				.setValue(this.plugin.settings.uidGenerator)
-				.onChange(async (value: 'uuid' | 'nanoid' | 'ulid') => {
+				.onChange(async (value: 'uuid' | 'nanoid' | 'ulid' | 'snowflake') => {
 					this.plugin.settings.uidGenerator = value;
 					await this.plugin.saveSettings();
 					this.display();
@@ -174,9 +184,78 @@ export class UIDSettingTab extends PluginSettingTab {
 					}));
 		}
 
+		if (this.plugin.settings.uidGenerator === 'snowflake') {
+			new Setting(containerEl).setName('Snowflake settings').setHeading();
+
+			// Refresh the cached machine value before rendering, so the field
+			// below shows the real detected value (not the lingering 0 from
+			// before the user picked Snowflake from the dropdown).
+			const next = resolveAutoDetectedNodeId(this.plugin.settings.snowflakeNodeId);
+			if (next !== null) {
+				this.plugin.settings.snowflakeNodeId = next;
+				// Fire-and-forget: display() is sync; the in-memory mutation
+				// takes effect immediately, the next save flushes to disk.
+				this.plugin.saveSettings();
+			}
+
+			const machineId = this.plugin.settings.snowflakeNodeId;
+			const override = this.plugin.settings.snowflakeNodeIdOverride;
+			const overrideActive = override !== null;
+			const detectedNow = detectNodeId();
+
+			const machineDesc = (detectedNow !== null
+				? 'Auto-detected from this machine\'s MAC address.'
+				: 'No MAC address available (mobile or restricted environment); using a random persistent value.')
+				+ (overrideActive
+					? ' A Custom Node ID is set below — the machine value is currently NOT used.'
+					: ' This is the value used for generated UIDs.');
+
+			new Setting(containerEl)
+				.setName('Machine Node ID')
+				.setDesc(machineDesc)
+				.addText(text => {
+					text.setValue(String(machineId));
+					text.setDisabled(true);
+				});
+
+			const overrideDesc = overrideActive
+				? `Override active — generated UIDs use ${override} instead of the Machine Node ID above. Clear this field to fall back to the machine value.`
+				: 'Optional. If set, overrides the Machine Node ID for generated UIDs. Leave empty to use the machine value. Range: 0–1023.';
+
+			new Setting(containerEl)
+				.setName('Custom Node ID')
+				.setDesc(overrideDesc)
+				.addText(text => {
+					text.setPlaceholder('(none)');
+					text.setValue(override === null ? '' : String(override));
+					text.onChange(async (value) => {
+						const trimmed = value.trim();
+						if (trimmed === '') {
+							if (this.plugin.settings.snowflakeNodeIdOverride !== null) {
+								this.plugin.settings.snowflakeNodeIdOverride = null;
+								await this.plugin.saveSettings();
+								this.display();
+							}
+							return;
+						}
+						const num = parseInt(trimmed, 10);
+						if (!isNaN(num) && num >= 0 && num <= 1023) {
+							if (this.plugin.settings.snowflakeNodeIdOverride !== num) {
+								this.plugin.settings.snowflakeNodeIdOverride = num;
+								await this.plugin.saveSettings();
+								this.display();
+							}
+						}
+					});
+				});
+
+		}
+
 		// --- Automatic UID Generation ---
-		new Setting(containerEl).setName('Automatic uid generation').setHeading();
-		containerEl.createEl('p', { text: `Automatically add a ${this.plugin.settings.uidKey} to notes when they are created or opened, if they don't already have one.` }).addClass('setting-item-description');
+		new Setting(containerEl)
+			.setName('Automatic uid generation')
+			.setDesc(`Automatically add a ${this.plugin.settings.uidKey} to notes when they are created or opened, if they don't already have one.`)
+			.setHeading();
 
 		new Setting(containerEl)
 			.setName('Enable automatic uid generation')
@@ -194,7 +273,7 @@ export class UIDSettingTab extends PluginSettingTab {
 				.setName('Generation scope')
 				.addDropdown(dropdown => dropdown
 					.addOption('vault', 'Entire Vault')
-					.addOption('folder', 'Specific Folder')
+					.addOption('folder', 'Specific Folder(s)')
 					.setValue(this.plugin.settings.autoGenerationScope)
 					.onChange(async (value: 'vault' | 'folder') => {
 						this.plugin.settings.autoGenerationScope = value;
@@ -202,20 +281,26 @@ export class UIDSettingTab extends PluginSettingTab {
 						this.display();
 					}));
 
-			// Display folder input only if scope is 'folder'
+			// Display folder management only if scope is 'folder'
 			if (this.plugin.settings.autoGenerationScope === 'folder') {
 				new Setting(containerEl)
-					.setName('Target folder for auto-generation')
-					.setDesc('Generate uids only for notes in this folder (and subfolders).')
-					.addText(text => {
-						new FolderSuggest(this.app, text.inputEl);
-						text.setPlaceholder('Example: Notes/Inbox')
-							.setValue(this.plugin.settings.autoGenerationFolder)
-							.onChange(async (value) => {
-								this.plugin.settings.autoGenerationFolder = normalizePath(value.trim());
-								await this.plugin.saveSettings();
-							});
+					.setName('Target folders for auto-generation')
+					.setDesc('Generate uids only for notes in these folders (and subfolders).')
+					.addButton(button => button
+						.setButtonText('Manage folders')
+						.onClick(() => {
+							new FolderSelectionModal(this.app, this.plugin, () => this.display()).open();
+						}));
+
+				const folderListEl = containerEl.createEl('ul', { cls: 'uid-exclusion-list' });
+				if (this.plugin.settings.autoGenerationFolders.length > 0) {
+					const sortedFolders = [...this.plugin.settings.autoGenerationFolders].sort();
+					sortedFolders.forEach(folderPath => {
+						folderListEl.createEl('li', { text: folderPath });
 					});
+				} else {
+					folderListEl.createEl('li', { text: 'No target folders specified. Auto-generation is effectively disabled for folder scope.' });
+				}
 			}
 
 			// --- Excluded Folders Setting with Modal Button ---

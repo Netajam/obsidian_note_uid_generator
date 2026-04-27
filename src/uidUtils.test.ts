@@ -18,7 +18,7 @@ type Settings = {
 	nanoidAlphabet: string;
 	nanoidSeparators: Array<{ char: string; position: number }>;
 	snowflakeNodeId?: number;
-	snowflakeAutoDetectNodeId?: boolean;
+	snowflakeNodeIdOverride?: number | null;
 };
 
 function makePlugin(
@@ -626,6 +626,24 @@ describe('Snowflake ID generator', () => {
 	it('encodes the configured node ID into the middle bits', () => {
 		const id = generateUID(snowflakePlugin(42));
 		expect(decode(id).nodeId).toBe(42n);
+	});
+
+	it('uses the override Node ID when set, ignoring the machine value', () => {
+		const plugin = makePlugin({
+			uidGenerator: 'snowflake',
+			snowflakeNodeId: 5,
+			snowflakeNodeIdOverride: 99,
+		});
+		expect(decode(generateUID(plugin)).nodeId).toBe(99n);
+	});
+
+	it('falls back to the machine Node ID when the override is null', () => {
+		const plugin = makePlugin({
+			uidGenerator: 'snowflake',
+			snowflakeNodeId: 5,
+			snowflakeNodeIdOverride: null,
+		});
+		expect(decode(generateUID(plugin)).nodeId).toBe(5n);
 	});
 
 	it('clamps node IDs above the 10-bit max (1023) into range', () => {

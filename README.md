@@ -76,8 +76,8 @@ Access the plugin settings from Obsidian Settings -> Community Plugins -> UID Ge
     *   **NanoID Length:** (NanoID only) Length of the generated ID, excluding separators. Min 4, max 128. (Default: 21)
     *   **NanoID Alphabet:** (NanoID only) Characters used for ID generation. Must have at least 2 unique characters. (Default: `0-9A-Za-z`)
     *   **NanoID Separator Groups:** (NanoID only) Inject characters at specific positions in the generated ID. Positions can be negative (count from end). Multiple groups supported.
-    *   **Auto-detect Node ID:** (Snowflake only) Derive the 10-bit node ID from the machine's MAC address. On Obsidian Mobile (no Node `os` module), a random persistent node ID is picked once and reused.
-    *   **Node ID:** (Snowflake only) Manual override (0–1023). Editable when auto-detect is off.
+    *   **Machine Node ID:** (Snowflake only) Read-only display of the 10-bit node ID derived from this machine — MAC-hashed on desktop, random persistent on mobile. Used for generated IDs unless a Custom Node ID is set below.
+    *   **Custom Node ID:** (Snowflake only) Optional override (0–1023). When set, takes precedence over the Machine Node ID. Leave empty to use the machine value.
 *   **Automatic UID Generation:**
     *   **Enable Automatic UID Generation:** Toggle the automatic creation of UIDs on/off.
     *   **Generation Scope:** Choose `Entire Vault` or `Specific Folder(s)`.

@@ -78,6 +78,26 @@ export function _resetSnowflakeState(): void {
 }
 
 /**
+ * Resolves the Node ID auto-detect should produce for the given stored value.
+ * Returns the new value to persist, or null if the stored value is already
+ * correct (or no detection / fallback applies).
+ *
+ * - Desktop: returns the MAC-derived ID when it differs from `stored`.
+ * - Mobile (no MAC): returns a random 10-bit value when `stored === 0`,
+ *   so the random fallback is picked once and then preserved.
+ */
+export function resolveAutoDetectedNodeId(stored: number): number | null {
+	const detected = detectNodeId();
+	if (detected !== null) {
+		return detected !== stored ? detected : null;
+	}
+	if (stored === 0) {
+		return Math.floor(Math.random() * 1024);
+	}
+	return null;
+}
+
+/**
  * Attempts to derive a stable 10-bit node ID (0-1023) from the machine's MAC address.
  * Available on Electron (desktop). Returns null on mobile or if detection fails.
  */
@@ -145,7 +165,8 @@ export function generateUID(plugin: UIDGenerator): string {
 
 function generateRawUID(plugin: UIDGenerator): string {
 	if (plugin.settings.uidGenerator === 'snowflake') {
-		return generateSnowflakeID(plugin.settings.snowflakeNodeId);
+		const effective = plugin.settings.snowflakeNodeIdOverride ?? plugin.settings.snowflakeNodeId;
+		return generateSnowflakeID(effective);
 	}
 	if (plugin.settings.uidGenerator === 'nanoid') {
 		const { nanoidAlphabet, nanoidLength, nanoidSeparators } = plugin.settings;

@@ -4,7 +4,7 @@ import { FolderSuggest } from './ui/FolderSuggest';
 import { ConfirmationModal } from './ui/ConfirmationModal';
 import { FolderExclusionModal } from './ui/FolderExclusionModal';
 import { FolderSelectionModal } from './ui/FolderSelectionModal';
-import { detectNodeId } from './uidUtils';
+import { detectNodeId, resolveAutoDetectedNodeId } from './uidUtils';
 
 // --- Settings Interface ---
 export interface UIDGeneratorSettings {
@@ -14,8 +14,9 @@ export interface UIDGeneratorSettings {
 	nanoidLength: number;
 	nanoidAlphabet: string;
 	nanoidSeparators: Array<{ char: string; position: number }>;
-	snowflakeNodeId: number;
-	snowflakeAutoDetectNodeId: boolean;
+	snowflakeNodeId: number;                       // machine-detected (or random mobile fallback)
+	snowflakeNodeIdOverride: number | null;        // when set, overrides the machine value
+	snowflakeAutoDetectNodeId?: boolean;           // legacy — kept only for migration from earlier PR builds
 	autoGenerationScope: 'vault' | 'folder';
 	autoGenerationFolder: string;   // kept for migration from older versions
 	autoGenerationFolders: string[];
@@ -34,7 +35,7 @@ export const DEFAULT_SETTINGS: UIDGeneratorSettings = {
 	nanoidAlphabet: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz',
 	nanoidSeparators: [],
 	snowflakeNodeId: 0,
-	snowflakeAutoDetectNodeId: true,
+	snowflakeNodeIdOverride: null,
 	autoGenerationScope: 'vault',
 	autoGenerationFolder: '',
 	autoGenerationFolders: [],
@@ -186,36 +187,64 @@ export class UIDSettingTab extends PluginSettingTab {
 		if (this.plugin.settings.uidGenerator === 'snowflake') {
 			new Setting(containerEl).setName('Snowflake settings').setHeading();
 
-			new Setting(containerEl)
-				.setName('Auto-detect Node ID')
-				.setDesc('Derive Node ID from MAC address on desktop. Falls back to a random persistent value on mobile.')
-				.addToggle(toggle => toggle
-					.setValue(this.plugin.settings.snowflakeAutoDetectNodeId)
-					.onChange(async (value) => {
-						this.plugin.settings.snowflakeAutoDetectNodeId = value;
-						if (value) {
-							const detected = detectNodeId();
-							if (detected !== null) {
-								this.plugin.settings.snowflakeNodeId = detected;
-							}
-						}
-						await this.plugin.saveSettings();
-						this.display();
-					}));
+			// Refresh the cached machine value before rendering, so the field
+			// below shows the real detected value (not the lingering 0 from
+			// before the user picked Snowflake from the dropdown).
+			const next = resolveAutoDetectedNodeId(this.plugin.settings.snowflakeNodeId);
+			if (next !== null) {
+				this.plugin.settings.snowflakeNodeId = next;
+				// Fire-and-forget: display() is sync; the in-memory mutation
+				// takes effect immediately, the next save flushes to disk.
+				this.plugin.saveSettings();
+			}
+
+			const machineId = this.plugin.settings.snowflakeNodeId;
+			const override = this.plugin.settings.snowflakeNodeIdOverride;
+			const overrideActive = override !== null;
+			const detectedNow = detectNodeId();
+
+			const machineDesc = (detectedNow !== null
+				? 'Auto-detected from this machine\'s MAC address.'
+				: 'No MAC address available (mobile or restricted environment); using a random persistent value.')
+				+ (overrideActive
+					? ' A Custom Node ID is set below — the machine value is currently NOT used.'
+					: ' This is the value used for generated UIDs.');
 
 			new Setting(containerEl)
-				.setName('Node ID')
-				.setDesc('Machine identifier (0–1023, 10 bits). Distinguishes IDs generated on different devices.')
+				.setName('Machine Node ID')
+				.setDesc(machineDesc)
 				.addText(text => {
-					text.setValue(String(this.plugin.settings.snowflakeNodeId));
-					if (this.plugin.settings.snowflakeAutoDetectNodeId) {
-						text.setDisabled(true);
-					}
+					text.setValue(String(machineId));
+					text.setDisabled(true);
+				});
+
+			const overrideDesc = overrideActive
+				? `Override active — generated UIDs use ${override} instead of the Machine Node ID above. Clear this field to fall back to the machine value.`
+				: 'Optional. If set, overrides the Machine Node ID for generated UIDs. Leave empty to use the machine value. Range: 0–1023.';
+
+			new Setting(containerEl)
+				.setName('Custom Node ID')
+				.setDesc(overrideDesc)
+				.addText(text => {
+					text.setPlaceholder('(none)');
+					text.setValue(override === null ? '' : String(override));
 					text.onChange(async (value) => {
-						const num = parseInt(value);
+						const trimmed = value.trim();
+						if (trimmed === '') {
+							if (this.plugin.settings.snowflakeNodeIdOverride !== null) {
+								this.plugin.settings.snowflakeNodeIdOverride = null;
+								await this.plugin.saveSettings();
+								this.display();
+							}
+							return;
+						}
+						const num = parseInt(trimmed, 10);
 						if (!isNaN(num) && num >= 0 && num <= 1023) {
-							this.plugin.settings.snowflakeNodeId = num;
-							await this.plugin.saveSettings();
+							if (this.plugin.settings.snowflakeNodeIdOverride !== num) {
+								this.plugin.settings.snowflakeNodeIdOverride = num;
+								await this.plugin.saveSettings();
+								this.display();
+							}
 						}
 					});
 				});

@@ -17,7 +17,7 @@ const DEFAULT_SETTINGS: UIDGeneratorSettings = {
 	nanoidAlphabet: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz',
 	nanoidSeparators: [],
 	snowflakeNodeId: 0,
-	snowflakeAutoDetectNodeId: false,
+	snowflakeNodeIdOverride: null,
 	autoGenerationScope: 'vault',
 	autoGenerationFolder: '',
 	autoGenerationFolders: [],

@@ -15,17 +15,13 @@ export default class UIDGenerator extends Plugin {
 	async onload() {
 		await this.loadSettings();
 
-		// Initialize Snowflake Node ID if auto-detect is on and the user actually
-		// uses Snowflake. Only writes settings when the value changes, so we
-		// don't churn disk on every plugin load.
-		if (this.settings.uidGenerator === 'snowflake' && this.settings.snowflakeAutoDetectNodeId) {
-			const detected = uidUtils.detectNodeId();
-			if (detected !== null && detected !== this.settings.snowflakeNodeId) {
-				this.settings.snowflakeNodeId = detected;
-				await this.saveSettings();
-			} else if (detected === null && this.settings.snowflakeNodeId === 0) {
-				// Mobile fallback: pick a random persistent node ID once.
-				this.settings.snowflakeNodeId = Math.floor(Math.random() * 1024);
+		// Refresh the cached machine Node ID for Snowflake on plugin load.
+		// The override (if any) takes precedence at generation time, but we
+		// still want the machine value to reflect the current hardware.
+		if (this.settings.uidGenerator === 'snowflake') {
+			const next = uidUtils.resolveAutoDetectedNodeId(this.settings.snowflakeNodeId);
+			if (next !== null) {
+				this.settings.snowflakeNodeId = next;
 				await this.saveSettings();
 			}
 		}
@@ -255,6 +251,23 @@ export default class UIDGenerator extends Plugin {
 				this.settings.autoGenerationFolders.push(oldFolder);
 			}
 			this.settings.autoGenerationFolder = '';
+			await this.saveSettings();
+		}
+
+		// One-shot migration from the legacy Snowflake auto-detect toggle to
+		// the override field. Earlier PR builds stored a manual Node ID in
+		// `snowflakeNodeId` with `snowflakeAutoDetectNodeId === false`; carry
+		// that intent forward as a custom override so the user's pick survives.
+		if (typeof this.settings.snowflakeAutoDetectNodeId === 'boolean') {
+			if (
+				this.settings.snowflakeAutoDetectNodeId === false
+				&& this.settings.snowflakeNodeIdOverride === null
+				&& this.settings.snowflakeNodeId > 0
+			) {
+				this.settings.snowflakeNodeIdOverride = this.settings.snowflakeNodeId;
+				this.settings.snowflakeNodeId = 0; // re-detect on next load
+			}
+			delete this.settings.snowflakeAutoDetectNodeId;
 			await this.saveSettings();
 		}
 	}

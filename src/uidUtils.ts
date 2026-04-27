@@ -83,8 +83,13 @@ export function _resetSnowflakeState(): void {
  * correct (or no detection / fallback applies).
  *
  * - Desktop: returns the MAC-derived ID when it differs from `stored`.
- * - Mobile (no MAC): returns a random 10-bit value when `stored === 0`,
- *   so the random fallback is picked once and then preserved.
+ * - Mobile (no MAC): returns a random value in 1–1023 when `stored === 0`,
+ *   so the random fallback is picked once and then preserved across reloads.
+ *
+ * The random range deliberately excludes 0: `stored === 0` is the sentinel
+ * for "not yet picked". If the random pick could land on 0, it would be
+ * indistinguishable from the unset state and re-roll on every plugin load,
+ * breaking ID stability across sessions.
  *
  * The `detect` parameter is for unit testing. Production callers omit it
  * and get the real MAC-based detector.
@@ -98,7 +103,7 @@ export function resolveAutoDetectedNodeId(
 		return detected !== stored ? detected : null;
 	}
 	if (stored === 0) {
-		return Math.floor(Math.random() * 1024);
+		return Math.floor(Math.random() * 1023) + 1;
 	}
 	return null;
 }

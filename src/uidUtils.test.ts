@@ -737,19 +737,35 @@ describe('Snowflake Node ID auto-detection', () => {
 			expect(resolveAutoDetectedNodeId(312, () => null)).toBeNull();
 		});
 
-		it('produces only values in the valid 10-bit range on the mobile path', () => {
-			// 1.0 would round up to 1024 (out of range) — confirm Math.floor keeps us safe.
+		it('produces only values in 1..1023 on the mobile path (never 0, never >1023)', () => {
+			// 0 is the "not yet picked" sentinel — picking it would cause re-rolls
+			// on every load, breaking node-ID stability across sessions.
 			const cases = [0.0, 0.0001, 0.5, 0.99, 0.999999];
 			for (const r of cases) {
 				const spy = vi.spyOn(Math, 'random').mockReturnValue(r);
 				try {
 					const result = resolveAutoDetectedNodeId(0, () => null);
 					if (result === null) throw new Error('expected non-null on mobile path with stored=0');
-					expect(result).toBeGreaterThanOrEqual(0);
+					expect(result).toBeGreaterThanOrEqual(1);
 					expect(result).toBeLessThanOrEqual(1023);
 				} finally {
 					spy.mockRestore();
 				}
+			}
+		});
+
+		it('persists the mobile-fallback value across consecutive resolves', () => {
+			// Simulate two plugin loads on a mobile device. The first picks a
+			// random value; the second must see "already picked" and not re-roll.
+			vi.spyOn(Math, 'random').mockReturnValue(0.4);
+			try {
+				const first = resolveAutoDetectedNodeId(0, () => null);
+				if (first === null) throw new Error('expected first load to pick a value');
+				// Subsequent load sees the value the first load saved.
+				const second = resolveAutoDetectedNodeId(first, () => null);
+				expect(second).toBeNull();
+			} finally {
+				vi.restoreAllMocks();
 			}
 		});
 	});

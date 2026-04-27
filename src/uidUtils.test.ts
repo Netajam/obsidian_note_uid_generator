@@ -8,6 +8,8 @@ import {
 	setUID,
 	removeUID,
 	_resetSnowflakeState,
+	detectNodeId,
+	resolveAutoDetectedNodeId,
 } from './uidUtils';
 import type UIDGenerator from './main';
 
@@ -707,5 +709,68 @@ describe('Snowflake ID generator', () => {
 		} finally {
 			vi.restoreAllMocks();
 		}
+	});
+});
+
+describe('Snowflake Node ID auto-detection', () => {
+	describe('resolveAutoDetectedNodeId', () => {
+		it('returns the detected value when it differs from stored', () => {
+			expect(resolveAutoDetectedNodeId(0, () => 799)).toBe(799);
+			expect(resolveAutoDetectedNodeId(42, () => 799)).toBe(799);
+		});
+
+		it('returns null when detected matches stored (no churn)', () => {
+			expect(resolveAutoDetectedNodeId(799, () => 799)).toBeNull();
+		});
+
+		it('mobile path: picks a random 10-bit value when stored is 0 and no MAC available', () => {
+			const randSpy = vi.spyOn(Math, 'random').mockReturnValue(0.5);
+			try {
+				const result = resolveAutoDetectedNodeId(0, () => null);
+				expect(result).toBe(512);
+			} finally {
+				randSpy.mockRestore();
+			}
+		});
+
+		it('mobile path: keeps an already-picked random value (stored > 0, no MAC)', () => {
+			expect(resolveAutoDetectedNodeId(312, () => null)).toBeNull();
+		});
+
+		it('produces only values in the valid 10-bit range on the mobile path', () => {
+			// 1.0 would round up to 1024 (out of range) — confirm Math.floor keeps us safe.
+			const cases = [0.0, 0.0001, 0.5, 0.99, 0.999999];
+			for (const r of cases) {
+				const spy = vi.spyOn(Math, 'random').mockReturnValue(r);
+				try {
+					const result = resolveAutoDetectedNodeId(0, () => null);
+					if (result === null) throw new Error('expected non-null on mobile path with stored=0');
+					expect(result).toBeGreaterThanOrEqual(0);
+					expect(result).toBeLessThanOrEqual(1023);
+				} finally {
+					spy.mockRestore();
+				}
+			}
+		});
+	});
+
+	describe('detectNodeId', () => {
+		// Cross-platform smoke test: this runs on the developer's machine,
+		// which has a real `os` module. The function must either return a
+		// valid 10-bit number, or null — never throw, never return out of range.
+		it('never throws and always returns null or a value in 0–1023', () => {
+			let result: number | null = null;
+			expect(() => { result = detectNodeId(); }).not.toThrow();
+			if (result !== null) {
+				expect(result).toBeGreaterThanOrEqual(0);
+				expect(result).toBeLessThanOrEqual(1023);
+			}
+		});
+
+		it('returns a deterministic value on repeated calls (same machine → same node ID)', () => {
+			const a = detectNodeId();
+			const b = detectNodeId();
+			expect(a).toBe(b);
+		});
 	});
 });

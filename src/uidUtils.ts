@@ -85,9 +85,15 @@ export function _resetSnowflakeState(): void {
  * - Desktop: returns the MAC-derived ID when it differs from `stored`.
  * - Mobile (no MAC): returns a random 10-bit value when `stored === 0`,
  *   so the random fallback is picked once and then preserved.
+ *
+ * The `detect` parameter is for unit testing. Production callers omit it
+ * and get the real MAC-based detector.
  */
-export function resolveAutoDetectedNodeId(stored: number): number | null {
-	const detected = detectNodeId();
+export function resolveAutoDetectedNodeId(
+	stored: number,
+	detect: () => number | null = detectNodeId,
+): number | null {
+	const detected = detect();
 	if (detected !== null) {
 		return detected !== stored ? detected : null;
 	}

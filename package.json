@@ -1,7 +1,7 @@
 {
 	"name": "note_uid_generator",
 	"version": "1.2.1",
-	"description": "Obsidian plugin to generate unique IDs (UUID, NanoID, or ULID) for your notes",
+	"description": "Obsidian plugin to generate unique IDs (UUID, NanoID, ULID, or Snowflake) for your notes",
 	"main": "src/main.js",
 	"scripts": {
 		"dev": "node esbuild.config.mjs",

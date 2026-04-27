@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { TFile } from 'obsidian';
 
 import {
@@ -7,15 +7,18 @@ import {
 	getUIDFromFile,
 	setUID,
 	removeUID,
+	_resetSnowflakeState,
 } from './uidUtils';
 import type UIDGenerator from './main';
 
 type Settings = {
 	uidKey: string;
-	uidGenerator: 'uuid' | 'nanoid' | 'ulid';
+	uidGenerator: 'uuid' | 'nanoid' | 'ulid' | 'snowflake';
 	nanoidLength: number;
 	nanoidAlphabet: string;
 	nanoidSeparators: Array<{ char: string; position: number }>;
+	snowflakeNodeId?: number;
+	snowflakeAutoDetectNodeId?: boolean;
 };
 
 function makePlugin(
@@ -593,5 +596,98 @@ describe('removeUID', () => {
 		expect(frontmatter.uid).toBeUndefined();
 		expect(uidCache.has('0')).toBe(false);
 		expect(uidPathMap.has('note.md')).toBe(false);
+	});
+});
+
+describe('Snowflake ID generator', () => {
+	beforeEach(() => {
+		_resetSnowflakeState();
+	});
+
+	function snowflakePlugin(nodeId: number): UIDGenerator {
+		return makePlugin({ uidGenerator: 'snowflake', snowflakeNodeId: nodeId });
+	}
+
+	// Layout (lsb → msb): 12 bits sequence, 10 bits node, 41 bits timestamp.
+	function decode(id: string): { timestamp: bigint; nodeId: bigint; sequence: bigint } {
+		const big = BigInt(id);
+		return {
+			sequence: big & 0xfffn,
+			nodeId: (big >> 12n) & 0x3ffn,
+			timestamp: big >> 22n,
+		};
+	}
+
+	it('produces a numeric string', () => {
+		const id = generateUID(snowflakePlugin(7));
+		expect(id).toMatch(/^\d+$/);
+	});
+
+	it('encodes the configured node ID into the middle bits', () => {
+		const id = generateUID(snowflakePlugin(42));
+		expect(decode(id).nodeId).toBe(42n);
+	});
+
+	it('clamps node IDs above the 10-bit max (1023) into range', () => {
+		// nodeId 2048 has bit 11 set; after & 1023 it should land at 0.
+		const id = generateUID(snowflakePlugin(2048));
+		expect(decode(id).nodeId).toBe(0n);
+	});
+
+	it('increments the sequence within the same millisecond', () => {
+		vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
+		try {
+			const a = decode(generateUID(snowflakePlugin(1)));
+			const b = decode(generateUID(snowflakePlugin(1)));
+			const c = decode(generateUID(snowflakePlugin(1)));
+			expect(a.timestamp).toBe(b.timestamp);
+			expect(b.timestamp).toBe(c.timestamp);
+			expect(b.sequence).toBe(a.sequence + 1n);
+			expect(c.sequence).toBe(b.sequence + 1n);
+		} finally {
+			vi.restoreAllMocks();
+		}
+	});
+
+	it('resets the sequence when the timestamp advances', () => {
+		const nowSpy = vi.spyOn(Date, 'now');
+		nowSpy.mockReturnValue(1_700_000_000_000);
+		try {
+			generateUID(snowflakePlugin(1));
+			generateUID(snowflakePlugin(1));
+			nowSpy.mockReturnValue(1_700_000_000_001);
+			const next = decode(generateUID(snowflakePlugin(1)));
+			expect(next.sequence).toBe(0n);
+			expect(next.timestamp).toBe(BigInt(1_700_000_000_001) & ((1n << 41n) - 1n));
+		} finally {
+			vi.restoreAllMocks();
+		}
+	});
+
+	it('survives a backwards clock jump without deadlocking', () => {
+		const nowSpy = vi.spyOn(Date, 'now');
+		nowSpy.mockReturnValue(1_700_000_000_010);
+		try {
+			const before = decode(generateUID(snowflakePlugin(3)));
+			// Clock jumps backwards (NTP / suspend-resume).
+			nowSpy.mockReturnValue(1_700_000_000_000);
+			const after = decode(generateUID(snowflakePlugin(3)));
+			// Generator must keep moving forward, not spin or regress.
+			expect(after.timestamp).toBeGreaterThan(before.timestamp);
+		} finally {
+			vi.restoreAllMocks();
+		}
+	});
+
+	it('produces strictly increasing IDs across many calls in one ms', () => {
+		vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
+		try {
+			const ids = Array.from({ length: 200 }, () => BigInt(generateUID(snowflakePlugin(1))));
+			for (let i = 1; i < ids.length; i++) {
+				expect(ids[i] > ids[i - 1]).toBe(true);
+			}
+		} finally {
+			vi.restoreAllMocks();
+		}
 	});
 });

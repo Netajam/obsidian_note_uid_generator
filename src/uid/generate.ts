@@ -1,31 +1,9 @@
 import { Notice } from 'obsidian';
-import { v4 as uuidv4 } from 'uuid';
-import { ulid } from 'ulid';
 import type { UidContext } from './model/context';
-import { generateNanoID } from './generators/nanoid';
-import { generateSnowflakeID } from './generators/snowflake';
-import { detectNodeId, resolveAutoDetectedNodeId } from './generators/nodeId';
+import { generateRawUID, resolveMachineNodeId } from './generators/algorithms';
 
 const MAX_COLLISION_RETRIES = 10;
 const COLLISION_NOTICE_MS = 15000;
-
-/** Runs the configured algorithm once, without checking the collision cache. */
-function generateRawUID(ctx: UidContext): string {
-	const { uidGenerator } = ctx.settings;
-
-	if (uidGenerator === 'snowflake') {
-		const { snowflakeNodeIdOverride, snowflakeNodeId } = ctx.settings;
-		return generateSnowflakeID(snowflakeNodeIdOverride ?? snowflakeNodeId);
-	}
-	if (uidGenerator === 'nanoid') {
-		const { nanoidAlphabet, nanoidLength, nanoidSeparators } = ctx.settings;
-		return generateNanoID(nanoidAlphabet, nanoidLength, nanoidSeparators);
-	}
-	if (uidGenerator === 'ulid') {
-		return ulid();
-	}
-	return uuidv4();
-}
 
 /** Explains an exhausted retry budget, spelling out the NanoID keyspace when that is the cause. */
 function warnCollisionExhausted(ctx: UidContext): void {
@@ -53,7 +31,7 @@ function warnCollisionExhausted(ctx: UidContext): void {
 /** Generates a unique ID with the configured algorithm, retrying past cached collisions. */
 export function generateUID(ctx: UidContext): string {
 	for (let attempt = 0; attempt < MAX_COLLISION_RETRIES; attempt++) {
-		const id = generateRawUID(ctx);
+		const id = generateRawUID(ctx.settings);
 		if (!ctx.uidCache.has(id)) {
 			return id;
 		}
@@ -61,7 +39,7 @@ export function generateUID(ctx: UidContext): string {
 	}
 
 	// All retries exhausted — notify the user and return the duplicate as last resort
-	const fallback = generateRawUID(ctx);
+	const fallback = generateRawUID(ctx.settings);
 	console.error(`[UIDGenerator] Failed to generate unique ID after ${MAX_COLLISION_RETRIES} attempts.`);
 	warnCollisionExhausted(ctx);
 	return fallback;
@@ -78,14 +56,9 @@ export interface MachineNodeIdStatus {
 
 /** Brings the cached machine Node ID in line with the current hardware. */
 export function refreshMachineNodeId(ctx: UidContext): MachineNodeIdStatus {
-	const detected = detectNodeId();
-	const next = resolveAutoDetectedNodeId(ctx.settings.snowflakeNodeId, () => detected);
+	const { next, fromMacAddress } = resolveMachineNodeId(ctx.settings.snowflakeNodeId);
 	if (next !== null) {
 		ctx.settings.snowflakeNodeId = next;
 	}
-	return {
-		value: ctx.settings.snowflakeNodeId,
-		fromMacAddress: detected !== null,
-		changed: next !== null,
-	};
+	return { value: ctx.settings.snowflakeNodeId, fromMacAddress, changed: next !== null };
 }

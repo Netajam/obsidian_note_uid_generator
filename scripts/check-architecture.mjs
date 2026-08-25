@@ -1,19 +1,25 @@
 #!/usr/bin/env node
 /**
- * Checks the two folder invariants `nao reshape` does not measure.
+ * Checks two folder invariants as hard rules, in CI, offline.
  *
  *   1. ONE DOOR    — at most one child of a folder is imported from outside it.
- *   2. LEAF EXITS  — only leaf children (those importing no sibling) may import
- *                    values from outside the folder.
+ *   2. LEAF EXITS  — a child may import values from outside the folder only if
+ *                    it is a leaf (imports no sibling) or the folder's door.
  *
- * Type-only imports are free under both rules: depending on a port costs
- * nothing at runtime, and it is depending on an *implementation* that the leaf
- * rule is there to confine. That is why the codebase writes `import type`
- * explicitly — it is the difference the checker reads.
+ * Type-only imports are free under both: depending on a port costs nothing at
+ * runtime, and it is depending on an *implementation* that the leaf rule is
+ * there to confine. That is why the codebase writes `import type` explicitly.
  *
- * `nao reshape` scores entry concentration on a 0.60 threshold and states that
- * outgoing dependencies are never a defect, so a folder can be `fractal` and
- * still fail both rules here. The two tools are complementary, not redundant.
+ * Overlap with `nao reshape`, which now covers much of this ground:
+ *   - reshape discounts type-only arrows too, and reached that independently.
+ *   - reshape classifies egress by origin (leaf / door / middle) and calls a
+ *     door exiting "structural: a facade imports what it hands on". The door
+ *     exemption above exists because of that — an earlier version of this
+ *     script flagged composition roots, which was wrong.
+ *   - reshape scores entry concentration as a ratio against a 0.60 gate and
+ *     counts inbound *edges*; this counts distinct entry *files* and demands
+ *     exactly one. That is the stricter, more literal reading, and it is the
+ *     main thing this script still adds — along with failing a build.
  *
  *   node scripts/check-architecture.mjs            # fail on regressions only
  *   node scripts/check-architecture.mjs --baseline # rewrite the baseline
@@ -108,11 +114,14 @@ for (const folder of folders) {
 		});
 	}
 	for (const child of children) {
-		if (!outward.has(child) || !dependsOnSibling.has(child)) continue;
+		if (!outward.has(child)) continue;
+		const isLeaf = !dependsOnSibling.has(child);
+		// A door importing what it hands on is structural, not a defect.
+		if (isLeaf || doors.has(child)) continue;
 		violations.push({
 			rule: 'leaf-exit',
 			id: `leaf-exit:${name(child)}`,
-			detail: `non-leaf exits to ${[...outward.get(child)].map(t => name(t)).sort().join(', ')}`,
+			detail: `exits from the middle to ${[...outward.get(child)].map(t => name(t)).sort().join(', ')}`,
 		});
 	}
 }

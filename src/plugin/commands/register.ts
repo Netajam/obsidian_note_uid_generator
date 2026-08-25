@@ -1,5 +1,5 @@
 import {
-	Editor, MarkdownView, Menu, Plugin, TAbstractFile, TFile, TFolder, WorkspaceLeaf, debounce,
+	Editor, MarkdownView, Menu, Plugin, TAbstractFile, TFile, TFolder, debounce,
 } from 'obsidian';
 import type { UidContext } from '../../uid/model/context';
 import { handleAutoGenerateUid } from './autoGenerate';
@@ -92,38 +92,37 @@ function registerPaletteCommands(host: Plugin, ctx: UidContext): void {
 	});
 }
 
+/** Every context-menu entry this plugin adds is a copy action; they differ only in label and target. */
+function addCopyItem(menu: Menu, title: string, run: () => void): void {
+	menu.addItem(item => item.setTitle(title).setIcon('copy').onClick(run));
+}
+
 function registerContextMenus(host: Plugin, ctx: UidContext): void {
 	const { uidKey } = ctx.settings;
 
-	host.registerEvent(host.app.workspace.on('file-menu',
-		(menu: Menu, fileOrFolder: TAbstractFile, source: string, leaf?: WorkspaceLeaf) => {
-			if (fileOrFolder instanceof TFolder) {
-				menu.addItem(item => item
-					.setTitle(`Copy titles + ${uidKey}s from "${fileOrFolder.name}"`)
-					.setIcon('copy')
-					.onClick(() => handleCopyTitlesAndUidsFromFolder(ctx, fileOrFolder)));
-			} else {
-				const note = asNote(fileOrFolder);
-				if (!note) return;
-				menu.addItem(item => item
-					.setTitle(`Copy title + ${uidKey}`)
-					.setIcon('copy')
-					.onClick(() => handleCopyTitleUid(ctx, note)));
-			}
-		}));
+	host.registerEvent(host.app.workspace.on('file-menu', (menu: Menu, fileOrFolder: TAbstractFile) => {
+		if (fileOrFolder instanceof TFolder) {
+			addCopyItem(menu, `Copy titles + ${uidKey}s from "${fileOrFolder.name}"`,
+				() => handleCopyTitlesAndUidsFromFolder(ctx, fileOrFolder));
+			return;
+		}
+
+		const note = asNote(fileOrFolder);
+		if (note) {
+			addCopyItem(menu, `Copy title + ${uidKey}`, () => handleCopyTitleUid(ctx, note));
+		}
+	}));
 
 	// `files-menu` is undocumented; see src/plugin/obsidian.d.ts.
 	host.registerEvent(host.app.workspace.on('files-menu',
-		(menu: Menu, files: TAbstractFile[], source: string, leaf?: WorkspaceLeaf) => {
+		(menu: Menu, files: TAbstractFile[], source: string) => {
 			if (source !== 'file-explorer-context-menu') return;
 
-			const markdownFiles = notesAmong(files);
-			if (markdownFiles.length === 0) return;
+			const notes = notesAmong(files);
+			if (notes.length === 0) return;
 
-			menu.addItem(item => item
-				.setTitle(`Copy titles + ${uidKey}s for ${markdownFiles.length} selected`)
-				.setIcon('copy')
-				.onClick(() => handleCopyTitlesAndUidsForMultipleFiles(ctx, markdownFiles)));
+			addCopyItem(menu, `Copy titles + ${uidKey}s for ${notes.length} selected`,
+				() => handleCopyTitlesAndUidsForMultipleFiles(ctx, notes));
 		}));
 }
 

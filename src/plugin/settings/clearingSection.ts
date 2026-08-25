@@ -1,36 +1,8 @@
 import { Notice, Setting, normalizePath } from 'obsidian';
-import { clearUIDsInFolder } from '../../uid/bulk';
+import { clearFolderUids } from './vaultPasses';
 import { ConfirmationModal } from './ui/ConfirmationModal';
 import { FolderSuggest } from './ui/FolderSuggest';
 import type { SettingsSection } from './section';
-
-/**
- * Clearing runs with auto-generation switched off, otherwise the notes it
- * clears are handed straight back a new uid when they are next opened.
- *
- * Takes the section rather than the plugin-wide `UidContext`: this file needs
- * only what a settings section is already handed, and naming the wider type
- * would couple it to the uid domain's vocabulary for no gain.
- */
-async function clearWithAutoGenerationOff({ ctx }: SettingsSection, folderPath: string): Promise<void> {
-	const autoGenWasOn = ctx.settings.autoGenerateUid;
-	if (autoGenWasOn) {
-		ctx.settings.autoGenerateUid = false;
-		await ctx.saveSettings();
-	}
-
-	try {
-		await clearUIDsInFolder(ctx, folderPath);
-	} catch (err) {
-		console.error('[UIDGenerator] Error during bulk uid clearing process:', err);
-		new Notice('An unexpected error occurred during uid clearing. Check console.', 5000);
-	} finally {
-		if (autoGenWasOn) {
-			// It stays off — say so rather than silently changing the user's setting back.
-			new Notice('Automatic uid generation was disabled. You can re-enable it in settings if desired.', 8000);
-		}
-	}
-}
 
 /** Bulk removal of uids from a folder. Destructive, so it goes through a confirmation modal. */
 export function renderClearingSection(section: SettingsSection): void {
@@ -65,7 +37,7 @@ export function renderClearingSection(section: SettingsSection): void {
 				}
 
 				new ConfirmationModal(ctx.app, folderPath, ctx.settings.uidKey, async () => {
-					await clearWithAutoGenerationOff(section, folderPath);
+					await clearFolderUids(ctx, folderPath);
 					refresh();
 				}).open();
 			}));

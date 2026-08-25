@@ -1,6 +1,4 @@
 [
-  "leaf-exit:src/plugin/settings/autoGenerationSection.ts",
-  "leaf-exit:src/plugin/settings/clearingSection.ts",
   "one-door:src/plugin/settings/ui",
   "one-door:src/uid",
   "one-door:src/uid/model",

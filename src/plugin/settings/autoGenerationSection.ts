@@ -1,5 +1,5 @@
-import { Notice, Setting } from 'obsidian';
-import { addMissingUidsInScope } from '../../uid/bulk';
+import { Setting } from 'obsidian';
+import { backfillMissingUids } from './vaultPasses';
 import { EXCLUDED_FOLDERS, type FolderList, FolderPickerModal, TARGET_FOLDERS } from './ui/FolderPickerModal';
 import type { SettingsSection } from './section';
 
@@ -79,10 +79,7 @@ function renderBackfillButton({ containerEl, ctx }: SettingsSection): void {
 				button.setDisabled(true);
 				button.setButtonText('Processing...');
 				try {
-					await addMissingUidsInScope(ctx);
-				} catch (e) {
-					console.error('[UIDGenerator] Error triggering bulk uid generation:', e);
-					new Notice('Failed to start bulk generation. See console.', 5000);
+					await backfillMissingUids(ctx);
 				} finally {
 					button.setDisabled(false);
 					button.setButtonText('Generate missing uids');

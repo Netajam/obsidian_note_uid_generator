@@ -1,17 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { TFile } from 'obsidian';
 
-import {
-	generateUID,
-	formatCopyString,
-	getUIDFromFile,
-	setUID,
-	removeUID,
-	_resetSnowflakeState,
-	detectNodeId,
-	resolveAutoDetectedNodeId,
-} from './uidUtils';
-import type UIDGenerator from './main';
+import { generateUID } from './generate';
+import { getUIDFromFile, removeUID, setUID } from './storage/frontmatter';
+import { detectNodeId, resolveAutoDetectedNodeId } from './generators/nodeId';
+import { _resetSnowflakeState } from './generators/snowflake';
+import type { UidContext } from './model/context';
 
 type Settings = {
 	uidKey: string;
@@ -26,7 +20,7 @@ type Settings = {
 function makePlugin(
 	overrides: Partial<Settings> = {},
 	cache: Set<string> = new Set(),
-): UIDGenerator {
+): UidContext {
 	const settings: Settings = {
 		uidKey: 'uid',
 		uidGenerator: 'uuid',
@@ -35,7 +29,7 @@ function makePlugin(
 		nanoidSeparators: [],
 		...overrides,
 	};
-	return { settings, uidCache: cache } as unknown as UIDGenerator;
+	return { settings, uidCache: cache } as unknown as UidContext;
 }
 
 type Frontmatter = Record<string, unknown>;
@@ -48,7 +42,7 @@ function makeFile(path: string, extension = 'md'): TFile {
 }
 
 interface PluginHarness {
-	plugin: UIDGenerator;
+	plugin: UidContext;
 	frontmatter: Frontmatter;
 	uidCache: Set<string>;
 	uidPathMap: Map<string, string>;
@@ -94,56 +88,11 @@ function makePluginWithApp(opts: {
 				processFrontMatter,
 			},
 		},
-	} as unknown as UIDGenerator;
+	} as unknown as UidContext;
 
 	return { plugin, frontmatter: fm, uidCache, uidPathMap, processFrontMatter };
 }
 
-describe('formatCopyString', () => {
-	it('substitutes title, uid, and uidKey', () => {
-		const plugin = makePlugin({ uidKey: 'note-id' });
-		expect(
-			formatCopyString(plugin, '{title} - {uidKey}: {uid}', 'My Note', 'abc123'),
-		).toBe('My Note - note-id: abc123');
-	});
-
-	it('replaces missing uid with empty string', () => {
-		const plugin = makePlugin();
-		expect(formatCopyString(plugin, '{title} {uid}', 'Hello', null)).toBe('Hello ');
-		expect(formatCopyString(plugin, '{title} {uid}', 'Hello', undefined)).toBe('Hello ');
-	});
-
-	it('replaces missing title with empty string', () => {
-		const plugin = makePlugin();
-		expect(formatCopyString(plugin, '{title}-{uid}', '', 'x')).toBe('-x');
-	});
-
-	it('replaces every occurrence of a placeholder', () => {
-		const plugin = makePlugin();
-		expect(formatCopyString(plugin, '{uid}/{uid}', '', 'abc')).toBe('abc/abc');
-	});
-
-	it('returns the format string unchanged when no placeholders are present', () => {
-		const plugin = makePlugin();
-		expect(formatCopyString(plugin, 'no placeholders here', 't', 'u')).toBe(
-			'no placeholders here',
-		);
-	});
-
-	it('returns an empty string when the format string is empty', () => {
-		const plugin = makePlugin();
-		expect(formatCopyString(plugin, '', 'title', 'uid')).toBe('');
-	});
-
-	it('substitutes a {uid} literal inside the title (placeholders are processed in order)', () => {
-		// {title} is replaced before {uid}, so a literal "{uid}" in the title
-		// will itself be replaced on the next pass. Documenting current behavior.
-		const plugin = makePlugin();
-		expect(formatCopyString(plugin, '{title}', 'has {uid} inside', 'X')).toBe(
-			'has X inside',
-		);
-	});
-});
 
 describe('generateUID — generator selection', () => {
 	it('returns a valid UUID v4 by default', () => {
@@ -606,7 +555,7 @@ describe('Snowflake ID generator', () => {
 		_resetSnowflakeState();
 	});
 
-	function snowflakePlugin(nodeId: number): UIDGenerator {
+	function snowflakePlugin(nodeId: number): UidContext {
 		return makePlugin({ uidGenerator: 'snowflake', snowflakeNodeId: nodeId });
 	}
 

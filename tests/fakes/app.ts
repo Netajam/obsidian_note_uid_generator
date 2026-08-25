@@ -1,31 +1,13 @@
 import { vi } from 'vitest';
 import { TFile, TFolder, MarkdownView } from 'obsidian';
-import type UIDGenerator from '../../src/main';
-import type { UIDGeneratorSettings } from '../../src/settings';
+import type { UidContext } from '../../src/uid/model/context';
+import { DEFAULT_SETTINGS, UIDGeneratorSettings } from '../../src/uid/model/settings';
 
 export interface FileSpec {
 	path: string;
 	extension?: string;
 	frontmatter?: Record<string, unknown>;
 }
-
-const DEFAULT_SETTINGS: UIDGeneratorSettings = {
-	uidKey: 'uid',
-	autoGenerateUid: false,
-	uidGenerator: 'uuid',
-	nanoidLength: 21,
-	nanoidAlphabet: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz',
-	nanoidSeparators: [],
-	snowflakeNodeId: 0,
-	snowflakeNodeIdOverride: null,
-	autoGenerationScope: 'vault',
-	autoGenerationFolder: '',
-	autoGenerationFolders: [],
-	autoGenerationExclusions: [],
-	folderToClear: '',
-	copyFormatString: '{title} - {uidKey}: {uid}',
-	copyFormatStringMissingUid: '{title} - No {uidKey}',
-};
 
 function buildTFile(spec: FileSpec, parent: TFolder | null): TFile {
 	const file = new TFile();
@@ -71,7 +53,7 @@ function buildFolderTree(files: TFile[]): Map<string, TFolder> {
 }
 
 export interface FakeApp {
-	plugin: UIDGenerator;
+	plugin: UidContext;
 	settings: UIDGeneratorSettings;
 	files: TFile[];
 	folders: Map<string, TFolder>;
@@ -140,7 +122,7 @@ export function makeFakeApp(opts: {
 				processFrontMatter,
 			},
 		},
-	} as unknown as UIDGenerator;
+	} as unknown as UidContext;
 
 	return {
 		plugin,

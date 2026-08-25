@@ -104,14 +104,10 @@ export class FolderPickerModal extends Modal {
 	}
 
 	private async toggle(folder: TFolder, select: boolean) {
-		const current = this.selectedPaths;
-		if (select) {
-			if (current.includes(folder.path)) return;
-			current.push(folder.path);
-			current.sort();
-		} else {
-			this.ctx.settings[this.list.field] = current.filter(path => path !== folder.path);
-		}
+		const withoutFolder = this.selectedPaths.filter(path => path !== folder.path);
+		this.ctx.settings[this.list.field] = select
+			? [...withoutFolder, folder.path].sort()
+			: withoutFolder;
 
 		await this.ctx.saveSettings();
 		this.renderSuggestions(this.inputEl.value);

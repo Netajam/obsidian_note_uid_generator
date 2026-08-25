@@ -90,27 +90,40 @@ export class FolderPickerModal extends Modal {
 		filteredFolders.forEach(folder => this.renderFolderRow(folder));
 	}
 
-	private renderFolderRow(folder: TFolder) {
-		const isSelected = this.selectedPaths.includes(folder.path);
+	/** Paints one row's button for a selection state. The only thing a toggle repaints. */
+	private paintButton(button: HTMLButtonElement, isSelected: boolean): void {
+		button.setText(isSelected ? 'Remove' : 'Add');
+		button.removeClass(isSelected ? 'mod-cta' : 'mod-warning');
+		button.addClass(isSelected ? 'mod-warning' : 'mod-cta');
+	}
 
+	private renderFolderRow(folder: TFolder) {
 		const settingItem = this.suggestionsEl.createDiv('setting-item');
 		settingItem.createDiv('setting-item-info')
 			.createDiv({ text: folder.path, cls: 'setting-item-name' });
 		const button = settingItem.createDiv('setting-item-control').createEl('button');
 
-		button.setText(isSelected ? 'Remove' : 'Add');
-		button.addClass(isSelected ? 'mod-warning' : 'mod-cta');
-		button.onclick = () => this.toggle(folder, !isSelected);
+		this.paintButton(button, this.selectedPaths.includes(folder.path));
+		button.onclick = () => this.toggle(folder, button);
 	}
 
-	private async toggle(folder: TFolder, select: boolean) {
+	/**
+	 * Selects or deselects one folder and repaints just its button.
+	 *
+	 * It used to re-run `renderSuggestions`, which rebuilt every row — losing
+	 * the user's scroll position on each click, and closing a render loop
+	 * (toggle → renderSuggestions → renderFolderRow → toggle) that made the
+	 * three methods impossible to read in isolation.
+	 */
+	private async toggle(folder: TFolder, button: HTMLButtonElement) {
+		const select = !this.selectedPaths.includes(folder.path);
 		const withoutFolder = this.selectedPaths.filter(path => path !== folder.path);
 		this.ctx.settings[this.list.field] = select
 			? [...withoutFolder, folder.path].sort()
 			: withoutFolder;
 
 		await this.ctx.saveSettings();
-		this.renderSuggestions(this.inputEl.value);
+		this.paintButton(button, select);
 		this.onSettingsChanged();
 	}
 

@@ -640,7 +640,7 @@ describe('handleGenerateUpdateUid — overwrites the active file uid', () => {
 		});
 		app.setActiveFile(app.files[0]);
 
-		await handleGenerateUpdateUid(app.plugin, activeNote(app.plugin), true);
+		await handleGenerateUpdateUid(app.plugin, activeNote(app.plugin.app), true);
 
 		const fm = app.frontmatterByPath.get('note.md') ?? {};
 		expect(fm.uid).toMatch(UUID_RE);
@@ -651,7 +651,7 @@ describe('handleGenerateUpdateUid — overwrites the active file uid', () => {
 		const app = makeFakeApp({ files: [{ path: 'note.md' }] });
 		app.setActiveFile(app.files[0]);
 
-		await handleGenerateUpdateUid(app.plugin, activeNote(app.plugin), true);
+		await handleGenerateUpdateUid(app.plugin, activeNote(app.plugin.app), true);
 
 		expect(app.frontmatterByPath.get('note.md')?.uid).toMatch(UUID_RE);
 	});
@@ -660,7 +660,7 @@ describe('handleGenerateUpdateUid — overwrites the active file uid', () => {
 		const app = makeFakeApp({ files: [{ path: 'note.md' }] });
 		// active file deliberately not set
 
-		await handleGenerateUpdateUid(app.plugin, activeNote(app.plugin), true);
+		await handleGenerateUpdateUid(app.plugin, activeNote(app.plugin.app), true);
 
 		expect(app.processFrontMatter).not.toHaveBeenCalled();
 		expect(app.frontmatterByPath.get('note.md')?.uid).toBeUndefined();
@@ -672,7 +672,7 @@ describe('handleCreateUidIfMissing — only sets when absent', () => {
 		const app = makeFakeApp({ files: [{ path: 'note.md' }] });
 		app.setActiveFile(app.files[0]);
 
-		await handleCreateUidIfMissing(app.plugin, activeNote(app.plugin));
+		await handleCreateUidIfMissing(app.plugin, activeNote(app.plugin.app));
 
 		expect(app.frontmatterByPath.get('note.md')?.uid).toMatch(UUID_RE);
 	});
@@ -683,7 +683,7 @@ describe('handleCreateUidIfMissing — only sets when absent', () => {
 		});
 		app.setActiveFile(app.files[0]);
 
-		await handleCreateUidIfMissing(app.plugin, activeNote(app.plugin));
+		await handleCreateUidIfMissing(app.plugin, activeNote(app.plugin.app));
 
 		expect(app.frontmatterByPath.get('note.md')?.uid).toBe('keep-me');
 		// Short-circuits before processFrontMatter is invoked.
@@ -698,7 +698,7 @@ describe('handleRemoveUid', () => {
 		});
 		app.setActiveFile(app.files[0]);
 
-		await handleRemoveUid(app.plugin, activeNote(app.plugin));
+		await handleRemoveUid(app.plugin, activeNote(app.plugin.app));
 
 		expect(app.frontmatterByPath.get('note.md')?.uid).toBeUndefined();
 	});
@@ -707,7 +707,7 @@ describe('handleRemoveUid', () => {
 		const app = makeFakeApp({ files: [{ path: 'note.md' }] });
 		app.setActiveFile(app.files[0]);
 
-		await handleRemoveUid(app.plugin, activeNote(app.plugin));
+		await handleRemoveUid(app.plugin, activeNote(app.plugin.app));
 
 		// removeUID is called but finds nothing to delete; frontmatter stays empty.
 		expect(app.frontmatterByPath.get('note.md')?.uid).toBeUndefined();
@@ -725,7 +725,7 @@ describe('handleRemoveUid', () => {
 		});
 		app.setActiveFile(app.files[0]);
 
-		await handleRemoveUid(app.plugin, activeNote(app.plugin));
+		await handleRemoveUid(app.plugin, activeNote(app.plugin.app));
 
 		const fm = app.frontmatterByPath.get('note.md') ?? {};
 		expect(fm['note-id']).toBeUndefined();
@@ -750,7 +750,7 @@ describe('handleCopyUid — copies the raw uid (no formatting)', () => {
 		});
 		app.setActiveFile(app.files[0]);
 
-		handleCopyUid(app.plugin, activeNote(app.plugin));
+		handleCopyUid(app.plugin, activeNote(app.plugin.app));
 		await new Promise((r) => setImmediate(r));
 
 		expect(clipboard.writes).toEqual(['just-me']);

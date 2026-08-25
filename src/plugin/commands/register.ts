@@ -28,7 +28,7 @@ const AUTO_GENERATE_DEBOUNCE_MS = 500;
 
 function registerRibbon(host: Plugin, ctx: UidContext): void {
 	host.addRibbonIcon('fingerprint', `Create ${ctx.settings.uidKey} if missing`, () => {
-		handleCreateUidIfMissing(ctx, activeNote(ctx));
+		handleCreateUidIfMissing(ctx, activeNote(ctx.app));
 	});
 }
 

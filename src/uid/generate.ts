@@ -1,12 +1,12 @@
 import { Notice } from 'obsidian';
-import type { UidContext } from './model/context';
+import type { UidStore } from './model/context';
 import { generateRawUID, resolveMachineNodeId } from './generators/algorithms';
 
 const MAX_COLLISION_RETRIES = 10;
 const COLLISION_NOTICE_MS = 15000;
 
 /** Explains an exhausted retry budget, spelling out the NanoID keyspace when that is the cause. */
-function warnCollisionExhausted(ctx: UidContext): void {
+function warnCollisionExhausted(ctx: UidStore): void {
 	if (ctx.settings.uidGenerator !== 'nanoid') {
 		new Notice(
 			`Warning: Could not generate a unique ${ctx.settings.uidKey} after ${MAX_COLLISION_RETRIES} attempts.`,
@@ -29,7 +29,7 @@ function warnCollisionExhausted(ctx: UidContext): void {
 }
 
 /** Generates a unique ID with the configured algorithm, retrying past cached collisions. */
-export function generateUID(ctx: UidContext): string {
+export function generateUID(ctx: UidStore): string {
 	for (let attempt = 0; attempt < MAX_COLLISION_RETRIES; attempt++) {
 		const id = generateRawUID(ctx.settings);
 		if (!ctx.uidCache.has(id)) {
@@ -55,7 +55,7 @@ export interface MachineNodeIdStatus {
 }
 
 /** Brings the cached machine Node ID in line with the current hardware. */
-export function refreshMachineNodeId(ctx: UidContext): MachineNodeIdStatus {
+export function refreshMachineNodeId(ctx: UidStore): MachineNodeIdStatus {
 	const { next, fromMacAddress } = resolveMachineNodeId(ctx.settings.snowflakeNodeId);
 	if (next !== null) {
 		ctx.settings.snowflakeNodeId = next;

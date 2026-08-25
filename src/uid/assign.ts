@@ -1,5 +1,5 @@
 import { TFile } from 'obsidian';
-import type { UidContext } from './model/context';
+import type { UidStore } from './model/context';
 import { generateUID } from './generate';
 import { getUIDFromFile, setUID } from './storage/frontmatter';
 import { isInAutoGenerationScope } from './scope';
@@ -28,7 +28,7 @@ export type EnsureUidOutcome =
 	| 'error';
 
 /** Adds a uid to `file` unless it is out of scope or already has one. */
-export async function ensureUid(ctx: UidContext, file: TFile): Promise<EnsureUidOutcome> {
+export async function ensureUid(ctx: UidStore, file: TFile): Promise<EnsureUidOutcome> {
 	if (!isInAutoGenerationScope(ctx.settings, file)) return 'out-of-scope';
 	if (getUIDFromFile(ctx, file)) return 'had-uid';
 

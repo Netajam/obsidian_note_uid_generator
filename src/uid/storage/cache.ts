@@ -1,5 +1,5 @@
 import { TFile } from 'obsidian';
-import type { UidContext } from '../model/context';
+import type { UidStore } from '../model/context';
 import { getUIDFromFile } from './frontmatter';
 
 /**
@@ -9,7 +9,7 @@ import { getUIDFromFile } from './frontmatter';
  */
 
 /** Rebuilds the cache from scratch — on layout ready, and whenever the uid key changes. */
-export function buildUidCache(ctx: UidContext): void {
+export function buildUidCache(ctx: UidStore): void {
 	ctx.uidCache.clear();
 	ctx.uidPathMap.clear();
 	for (const file of ctx.app.vault.getMarkdownFiles()) {
@@ -26,7 +26,7 @@ export function buildUidCache(ctx: UidContext): void {
  * created or synced in with a uid already set, and for frontmatter edited by
  * the user or another plugin.
  */
-export function syncUidFromFrontmatter(ctx: UidContext, file: TFile): void {
+export function syncUidFromFrontmatter(ctx: UidStore, file: TFile): void {
 	const oldUid = ctx.uidPathMap.get(file.path);
 	const newUid = getUIDFromFile(ctx, file);
 	if (oldUid === newUid) return;
@@ -41,7 +41,7 @@ export function syncUidFromFrontmatter(ctx: UidContext, file: TFile): void {
 }
 
 /** Evicts a deleted file. Uses the path map because its metadata may already be gone. */
-export function forgetFile(ctx: UidContext, path: string): void {
+export function forgetFile(ctx: UidStore, path: string): void {
 	const uid = ctx.uidPathMap.get(path);
 	if (!uid) return;
 	ctx.uidCache.delete(uid);

@@ -1,5 +1,5 @@
 import { Notice, TFile, TFolder, normalizePath } from 'obsidian';
-import type { UidContext } from './model/context';
+import type { UidStore } from './model/context';
 import { ensureUid } from './assign';
 import { removeUID } from './storage/frontmatter';
 import { getMarkdownFilesInFolder } from './folderNotes';
@@ -18,7 +18,7 @@ interface Tally {
 }
 
 /** Runs the shared missing-uid decision over one file and records the outcome. */
-async function addUidIfMissing(ctx: UidContext, file: TFile, tally: Tally): Promise<void> {
+async function addUidIfMissing(ctx: UidStore, file: TFile, tally: Tally): Promise<void> {
 	switch (await ensureUid(ctx, file)) {
 		case 'added': tally.added++; break;
 		case 'had-uid': tally.skippedExisting++; break;
@@ -35,7 +35,7 @@ function summarize(tally: Tally): string {
 }
 
 /** Adds a uid to every in-scope note that lacks one. */
-export async function addMissingUidsInScope(ctx: UidContext): Promise<void> {
+export async function addMissingUidsInScope(ctx: UidStore): Promise<void> {
 	const files = ctx.app.vault.getMarkdownFiles();
 	if (files.length === 0) {
 		new Notice('No markdown files found in the vault.');
@@ -64,7 +64,7 @@ export async function addMissingUidsInScope(ctx: UidContext): Promise<void> {
 }
 
 /** Removes the uid from every note under `folderPath`. */
-export async function clearUIDsInFolder(ctx: UidContext, folderPath: string): Promise<void> {
+export async function clearUIDsInFolder(ctx: UidStore, folderPath: string): Promise<void> {
 	const normalizedFolderPath = normalizePath(folderPath);
 	if (!normalizedFolderPath) {
 		new Notice('Folder path empty.');

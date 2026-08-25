@@ -1,5 +1,5 @@
 import { Notice, TFile } from 'obsidian';
-import type { UidContext } from '../model/context';
+import type { UidStore } from '../model/context';
 import { isMarkdownNote } from '../model/note';
 
 const ERROR_NOTICE_MS = 5000;
@@ -11,7 +11,7 @@ const ALTERNATE_UID_KEYS = ['uid', 'Uid', 'UID'];
  * Retrieves the UID for a given file, respecting the custom key setting.
  * Returns null if the file has no frontmatter, no uid, or could not be read.
  */
-export function getUIDFromFile(ctx: UidContext, file: TFile | null): string | null {
+export function getUIDFromFile(ctx: UidStore, file: TFile | null): string | null {
 	if (!file) return null;
 	try {
 		const frontmatter = ctx.app.metadataCache.getFileCache(file)?.frontmatter;
@@ -39,7 +39,7 @@ function dropAlternateKeys(frontmatter: Record<string, unknown>, key: string): v
  * @param overwrite If true, replaces an existing UID. If false, only sets a missing one.
  * @returns True if the UID was written, false if it was left untouched or the write failed.
  */
-export async function setUID(ctx: UidContext, file: TFile, uid: string, overwrite = false): Promise<boolean> {
+export async function setUID(ctx: UidStore, file: TFile, uid: string, overwrite = false): Promise<boolean> {
 	if (!isMarkdownNote(file)) {
 		return false;
 	}
@@ -80,7 +80,7 @@ export async function setUID(ctx: UidContext, file: TFile, uid: string, overwrit
  * Removes the UID property from a file's frontmatter, respecting the custom key.
  * @returns True if a UID was found and removed, false otherwise.
  */
-export async function removeUID(ctx: UidContext, file: TFile): Promise<boolean> {
+export async function removeUID(ctx: UidStore, file: TFile): Promise<boolean> {
 	if (!file || !(file instanceof TFile)) return false;
 
 	const key = ctx.settings.uidKey;

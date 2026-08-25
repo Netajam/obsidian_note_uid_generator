@@ -1,5 +1,6 @@
 import { Notice, TFile } from 'obsidian';
 import { UidContext } from '../model/context';
+import { isMarkdownNote } from '../model/note';
 
 const ERROR_NOTICE_MS = 5000;
 
@@ -39,7 +40,7 @@ function dropAlternateKeys(frontmatter: Record<string, unknown>, key: string): v
  * @returns True if the UID was written, false if it was left untouched or the write failed.
  */
 export async function setUID(ctx: UidContext, file: TFile, uid: string, overwrite = false): Promise<boolean> {
-	if (!file || !(file instanceof TFile) || file.extension !== 'md') {
+	if (!isMarkdownNote(file)) {
 		return false;
 	}
 	if (!uid) {

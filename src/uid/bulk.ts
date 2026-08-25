@@ -1,8 +1,8 @@
 import { Notice, TFile, TFolder, normalizePath } from 'obsidian';
 import { UidContext } from './model/context';
-import { generateUID } from './generate';
-import { getUIDFromFile, removeUID, setUID } from './storage/frontmatter';
-import { getMarkdownFilesInFolder, isInAutoGenerationScope } from './scope';
+import { ensureUid } from './assign';
+import { removeUID } from './storage/frontmatter';
+import { getMarkdownFilesInFolder } from './folderNotes';
 
 /** Vault-wide passes, driven from the settings tab. Both can run for a while, so both report progress. */
 
@@ -17,23 +17,13 @@ interface Tally {
 	errors: number;
 }
 
+/** Runs the shared missing-uid decision over one file and records the outcome. */
 async function addUidIfMissing(ctx: UidContext, file: TFile, tally: Tally): Promise<void> {
-	if (!isInAutoGenerationScope(ctx.settings, file)) {
-		tally.skippedScope++;
-		return;
-	}
-	if (getUIDFromFile(ctx, file)) {
-		tally.skippedExisting++;
-		return;
-	}
-
-	try {
-		// setUID reports its own failures via a Notice; just count them here.
-		if (await setUID(ctx, file, generateUID(ctx), false)) tally.added++;
-		else tally.errors++;
-	} catch (err) {
-		console.error(`[UIDGenerator] Unexpected error setting uid for ${file.path}:`, err);
-		tally.errors++;
+	switch (await ensureUid(ctx, file)) {
+		case 'added': tally.added++; break;
+		case 'had-uid': tally.skippedExisting++; break;
+		case 'out-of-scope': tally.skippedScope++; break;
+		case 'error': tally.errors++; break;
 	}
 }
 
@@ -89,7 +79,7 @@ export async function clearUIDsInFolder(ctx: UidContext, folderPath: string): Pr
 
 	new Notice(`Clearing ${ctx.settings.uidKey}s in "${folder.name}"... This may take a moment.`);
 
-	const files = getMarkdownFilesInFolder(ctx, folder);
+	const files = getMarkdownFilesInFolder(ctx.app, folder);
 	if (files.length === 0) {
 		new Notice(`No markdown files found within "${folder.name}".`);
 		return;

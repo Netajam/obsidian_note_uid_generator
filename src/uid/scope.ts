@@ -1,11 +1,10 @@
-import { normalizePath, TFile, TFolder } from 'obsidian';
-import { UidContext } from './model/context';
+import { normalizePath, TFile } from 'obsidian';
 import { UIDGeneratorSettings } from './model/settings';
 
 /**
- * Folder membership, in one place. Auto-generation, the bulk "add missing"
- * pass and the folder-scoped copy/clear actions all answer the same question
- * — "is this file under that folder?" — and must answer it identically.
+ * Whether a note is in scope for automatic uid generation. Both callers of
+ * `ensureUid` — the per-file vault event and the bulk backfill — reach this
+ * through it, so they cannot drift apart.
  */
 
 /** True when `path` is the folder itself or sits underneath it. '/' means the whole vault. */
@@ -35,20 +34,4 @@ export function isInAutoGenerationScope(settings: UIDGeneratorSettings, file: TF
 	if (isExcluded(settings.autoGenerationExclusions, normalizedPath)) return false;
 	if (settings.autoGenerationScope !== 'folder') return true;
 	return isInTargetFolders(settings, file, normalizedPath);
-}
-
-/** Every markdown note inside a folder (and its subfolders), deduplicated by path. */
-export function getMarkdownFilesInFolder(ctx: UidContext, folder: TFolder): TFile[] {
-	const targetPath = folder.path;
-	const seen = new Set<string>();
-	const files: TFile[] = [];
-
-	for (const file of ctx.app.vault.getMarkdownFiles()) {
-		const isInside = targetPath === '/' ? file.path !== '/' : file.path.startsWith(targetPath + '/');
-		if (isInside && !seen.has(file.path)) {
-			seen.add(file.path);
-			files.push(file);
-		}
-	}
-	return files;
 }

@@ -2,7 +2,7 @@ import { FileExplorerView, Notice, TFile, TFolder, WorkspaceLeaf } from 'obsidia
 import { UidContext } from '../../uid/model/context';
 import { formatFile, formatFiles } from './format';
 import { getUIDFromFile } from '../../uid/storage/frontmatter';
-import { getMarkdownFilesInFolder } from '../../uid/scope';
+import { getMarkdownFilesInFolder } from '../../uid/folderNotes';
 import { getActiveFile } from './activeFile';
 
 /** Everything that puts uids on the clipboard, from a single note up to a whole folder. */
@@ -49,7 +49,7 @@ export async function handleCopyTitleUid(ctx: UidContext, specificFile?: TFile):
 
 /** Folder context menu: copy title + uid for every note inside. */
 export async function handleCopyTitlesAndUidsFromFolder(ctx: UidContext, folder: TFolder): Promise<void> {
-	const files = getMarkdownFilesInFolder(ctx, folder);
+	const files = getMarkdownFilesInFolder(ctx.app, folder);
 	if (files.length === 0) {
 		new Notice(`No markdown notes found in "${folder.name}".`);
 		return;

@@ -1,5 +1,5 @@
 import { Notice, TFile } from 'obsidian';
-import { UidContext } from '../model/context';
+import type { UidContext } from '../model/context';
 import { isMarkdownNote } from '../model/note';
 
 const ERROR_NOTICE_MS = 5000;

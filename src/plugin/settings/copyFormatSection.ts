@@ -1,6 +1,6 @@
 import { Setting } from 'obsidian';
 import { DEFAULT_SETTINGS } from '../../uid/model/settings';
-import { SettingsSection } from './section';
+import type { SettingsSection } from './section';
 
 type FormatField = 'copyFormatString' | 'copyFormatStringMissingUid';
 

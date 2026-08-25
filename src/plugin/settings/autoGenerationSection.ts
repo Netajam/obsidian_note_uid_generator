@@ -1,7 +1,7 @@
 import { Notice, Setting } from 'obsidian';
 import { addMissingUidsInScope } from '../../uid/bulk';
-import { EXCLUDED_FOLDERS, FolderList, FolderPickerModal, TARGET_FOLDERS } from './ui/FolderPickerModal';
-import { SettingsSection } from './section';
+import { EXCLUDED_FOLDERS, type FolderList, FolderPickerModal, TARGET_FOLDERS } from './ui/FolderPickerModal';
+import type { SettingsSection } from './section';
 
 /** Renders a folder list as a `<ul>`, with a placeholder line when it is empty. */
 function renderFolderList(containerEl: HTMLElement, paths: string[], emptyText: string): void {

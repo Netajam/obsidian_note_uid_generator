@@ -1,5 +1,5 @@
 import { App, Modal, TFolder, debounce } from 'obsidian';
-import { UidContext } from '../../../uid/model/context';
+import type { UidContext } from '../../../uid/model/context';
 
 /**
  * Picks a set of folders and stores them in one of the settings' folder lists.

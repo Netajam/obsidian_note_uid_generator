@@ -1,20 +1,23 @@
 import {
-	Editor, FileExplorerView, MarkdownView, Menu, Plugin, TAbstractFile, TFile, TFolder, WorkspaceLeaf, debounce,
+	Editor, MarkdownView, Menu, Plugin, TAbstractFile, TFile, TFolder, WorkspaceLeaf, debounce,
 } from 'obsidian';
-import { UidContext } from '../../uid/model/context';
-import { isMarkdownNote } from '../../uid/model/note';
-import { getUIDFromFile } from '../../uid/storage/frontmatter';
+import type { UidContext } from '../../uid/model/context';
 import { handleAutoGenerateUid } from './autoGenerate';
 import {
-	handleCopyTitleUid, handleCopyTitlesAndUidsForMultipleFiles, handleCopyTitlesAndUidsForSelection,
-	handleCopyTitlesAndUidsFromFolder, handleCopyUid,
+	canCopySelection, handleCopyTitleUid, handleCopyTitlesAndUidsForMultipleFiles,
+	handleCopyTitlesAndUidsForSelection, handleCopyTitlesAndUidsFromFolder, handleCopyUid,
 } from './copy';
 import { handleCreateUidIfMissing, handleGenerateUpdateUid, handleRemoveUid } from './noteUid';
+import { activeNote, asNote, notesAmong } from './target';
 
 /**
  * The head of this folder: every way a user can trigger a uid command, wired
  * into Obsidian in one place. The handlers beside it never name Obsidian's
  * registration API, and nothing outside this folder names the handlers.
+ *
+ * It also resolves each command's target and hands it over, so no handler has
+ * to go looking. That is deliberate: it leaves this file importing siblings
+ * only, and every handler free to reach into `src/uid` as a leaf.
  */
 
 // Debounced so a burst of create/open events (startup, vault sync) fires once.
@@ -25,19 +28,8 @@ const AUTO_GENERATE_DEBOUNCE_MS = 500;
 
 function registerRibbon(host: Plugin, ctx: UidContext): void {
 	host.addRibbonIcon('fingerprint', `Create ${ctx.settings.uidKey} if missing`, () => {
-		handleCreateUidIfMissing(ctx);
+		handleCreateUidIfMissing(ctx, activeNote(ctx));
 	});
-}
-
-/** True when the file explorer is focused with at least one markdown file selected. */
-function hasMarkdownSelection(ctx: UidContext): boolean {
-	const leaf = ctx.app.workspace.getLeavesOfType('file-explorer')
-		?.find(candidate => candidate.view.getViewType() === 'file-explorer'
-			&& ctx.app.workspace.activeLeaf === candidate);
-	if (!leaf) return false;
-
-	const selectedPaths = (leaf.view as FileExplorerView).selectedFiles ?? [];
-	return selectedPaths.some(path => isMarkdownNote(ctx.app.vault.getAbstractFileByPath(path)));
 }
 
 function registerPaletteCommands(host: Plugin, ctx: UidContext): void {
@@ -47,7 +39,7 @@ function registerPaletteCommands(host: Plugin, ctx: UidContext): void {
 		id: 'generate-update-uid',
 		name: `Generate/update ${uidKey} (Overwrites)`,
 		editorCallback: (editor: Editor, view: MarkdownView) => {
-			handleGenerateUpdateUid(ctx, true);
+			handleGenerateUpdateUid(ctx, view.file, true);
 		},
 	});
 
@@ -55,7 +47,7 @@ function registerPaletteCommands(host: Plugin, ctx: UidContext): void {
 		id: 'create-uid-if-missing',
 		name: `Create ${uidKey} if missing`,
 		editorCallback: (editor: Editor, view: MarkdownView) => {
-			handleCreateUidIfMissing(ctx);
+			handleCreateUidIfMissing(ctx, view.file);
 		},
 	});
 
@@ -63,7 +55,7 @@ function registerPaletteCommands(host: Plugin, ctx: UidContext): void {
 		id: 'remove-uid',
 		name: `Remove ${uidKey} from current note`,
 		editorCallback: (editor: Editor, view: MarkdownView) => {
-			handleRemoveUid(ctx);
+			handleRemoveUid(ctx, view.file);
 		},
 	});
 
@@ -72,8 +64,8 @@ function registerPaletteCommands(host: Plugin, ctx: UidContext): void {
 		name: `Copy ${uidKey} of current note`,
 		editorCheckCallback: (checking: boolean, editor: Editor, view: MarkdownView) => {
 			const file = view.file;
-			if (!file || !getUIDFromFile(ctx, file)) return false;
-			if (!checking) handleCopyUid(ctx);
+			if (!file) return false;
+			if (!checking) handleCopyUid(ctx, file);
 			return true;
 		},
 	});
@@ -93,7 +85,7 @@ function registerPaletteCommands(host: Plugin, ctx: UidContext): void {
 		id: 'copy-title-uid-for-selection',
 		name: `Copy titles+ ${uidKey}s for selected files`,
 		checkCallback: (checking: boolean): boolean => {
-			if (!hasMarkdownSelection(ctx)) return false;
+			if (!canCopySelection(ctx)) return false;
 			if (!checking) handleCopyTitlesAndUidsForSelection(ctx);
 			return true;
 		},
@@ -110,11 +102,13 @@ function registerContextMenus(host: Plugin, ctx: UidContext): void {
 					.setTitle(`Copy titles + ${uidKey}s from "${fileOrFolder.name}"`)
 					.setIcon('copy')
 					.onClick(() => handleCopyTitlesAndUidsFromFolder(ctx, fileOrFolder)));
-			} else if (isMarkdownNote(fileOrFolder)) {
+			} else {
+				const note = asNote(fileOrFolder);
+				if (!note) return;
 				menu.addItem(item => item
 					.setTitle(`Copy title + ${uidKey}`)
 					.setIcon('copy')
-					.onClick(() => handleCopyTitleUid(ctx, fileOrFolder)));
+					.onClick(() => handleCopyTitleUid(ctx, note)));
 			}
 		}));
 
@@ -123,7 +117,7 @@ function registerContextMenus(host: Plugin, ctx: UidContext): void {
 		(menu: Menu, files: TAbstractFile[], source: string, leaf?: WorkspaceLeaf) => {
 			if (source !== 'file-explorer-context-menu') return;
 
-			const markdownFiles = files.filter(isMarkdownNote);
+			const markdownFiles = notesAmong(files);
 			if (markdownFiles.length === 0) return;
 
 			menu.addItem(item => item
@@ -147,13 +141,15 @@ function registerAutoGeneration(host: Plugin, ctx: UidContext): void {
 
 	host.app.workspace.onLayoutReady(() => {
 		host.registerEvent(host.app.vault.on('create', (file) => {
-			if (isMarkdownNote(file)) autoGenerate(file);
+			const note = asNote(file);
+			if (note) autoGenerate(note);
 		}));
 
 		host.registerEvent(host.app.workspace.on('file-open', (file) => {
-			if (!isMarkdownNote(file)) return;
+			const note = asNote(file);
+			if (!note) return;
 			const view = host.app.workspace.getActiveViewOfType(MarkdownView);
-			if (view?.file === file) autoGenerate(file);
+			if (view?.file === note) autoGenerate(note);
 		}));
 	});
 }

@@ -1,6 +1,6 @@
 import { Plugin } from 'obsidian';
 import { buildUidCache, forgetFile, syncUidFromFrontmatter } from '../uid/storage/cache';
-import { UidContext } from '../uid/model/context';
+import type { UidContext } from '../uid/model/context';
 import { isMarkdownNote } from '../uid/model/note';
 import { loadUidState } from './state';
 import { registerUidCommands } from './commands/register';

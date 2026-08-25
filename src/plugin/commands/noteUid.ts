@@ -1,16 +1,18 @@
 import { Notice, TFile } from 'obsidian';
-import { UidContext } from '../../uid/model/context';
+import type { UidContext } from '../../uid/model/context';
 import { generateUID } from '../../uid/generate';
 import { getUIDFromFile, removeUID, setUID } from '../../uid/storage/frontmatter';
-import { getActiveFile } from './activeFile';
 
-/** Single-note uid actions, all driven from the active markdown view. */
+/**
+ * Single-note uid actions. Each is handed the note it acts on rather than
+ * looking one up, which is what keeps this file a leaf: it reaches into the
+ * uid domain and depends on no sibling.
+ */
 
 const NO_ACTIVE_FILE = 'No active markdown file selected.';
 
 /** Generate/update command — writes a fresh uid over whatever is there. */
-export async function handleGenerateUpdateUid(ctx: UidContext, overwrite: true): Promise<void> {
-	const file = getActiveFile(ctx);
+export async function handleGenerateUpdateUid(ctx: UidContext, file: TFile | null, overwrite: true): Promise<void> {
 	if (!file) {
 		new Notice(NO_ACTIVE_FILE);
 		return;
@@ -26,8 +28,7 @@ export async function handleGenerateUpdateUid(ctx: UidContext, overwrite: true):
 }
 
 /** Ribbon icon and "create if missing" command — never overwrites. */
-export async function handleCreateUidIfMissing(ctx: UidContext): Promise<void> {
-	const file = getActiveFile(ctx);
+export async function handleCreateUidIfMissing(ctx: UidContext, file: TFile | null): Promise<void> {
 	if (!file) {
 		new Notice(NO_ACTIVE_FILE);
 		return;
@@ -44,8 +45,7 @@ export async function handleCreateUidIfMissing(ctx: UidContext): Promise<void> {
 }
 
 /** Remove-uid command. */
-export async function handleRemoveUid(ctx: UidContext): Promise<void> {
-	const file: TFile | null = getActiveFile(ctx);
+export async function handleRemoveUid(ctx: UidContext, file: TFile | null): Promise<void> {
 	if (!file) {
 		new Notice('No active markdown file to remove uid from.');
 		return;

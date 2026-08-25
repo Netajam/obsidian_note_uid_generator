@@ -2,7 +2,7 @@ import { Setting } from 'obsidian';
 import { DEFAULT_SETTINGS } from '../../uid/model/settings';
 import { buildUidCache } from '../../uid/storage/cache';
 import { refreshMachineNodeId } from '../../uid/generate';
-import { SettingsSection } from './section';
+import type { SettingsSection } from './section';
 
 const NANOID_MIN_LENGTH = 4;
 const NANOID_MAX_LENGTH = 128;

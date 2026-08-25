@@ -1,5 +1,5 @@
 import { normalizePath } from 'obsidian';
-import { DEFAULT_SETTINGS, UIDGeneratorSettings } from './settings';
+import { DEFAULT_SETTINGS, type UIDGeneratorSettings } from './settings';
 
 export interface MigratedSettings {
 	settings: UIDGeneratorSettings;

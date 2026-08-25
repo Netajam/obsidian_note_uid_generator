@@ -1,5 +1,5 @@
 import { App } from 'obsidian';
-import { UIDGeneratorSettings } from './settings';
+import type { UIDGeneratorSettings } from './settings';
 
 /**
  * Everything the plugin's features need from the plugin instance.

@@ -1,5 +1,5 @@
 import { Notice, TFile, TFolder, normalizePath } from 'obsidian';
-import { UidContext } from './model/context';
+import type { UidContext } from './model/context';
 import { ensureUid } from './assign';
 import { removeUID } from './storage/frontmatter';
 import { getMarkdownFilesInFolder } from './folderNotes';

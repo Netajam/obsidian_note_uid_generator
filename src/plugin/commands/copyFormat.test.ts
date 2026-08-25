@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatCopyString } from './format';
+import { formatCopyString } from './copy';
 import type { UidContext } from '../../uid/model/context';
 
 function makeCtx(uidKey = 'uid'): UidContext {

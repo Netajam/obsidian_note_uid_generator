@@ -1,9 +1,9 @@
 import { Notice, Setting, normalizePath } from 'obsidian';
-import { UidContext } from '../../uid/model/context';
+import type { UidContext } from '../../uid/model/context';
 import { clearUIDsInFolder } from '../../uid/bulk';
 import { ConfirmationModal } from './ui/ConfirmationModal';
 import { FolderSuggest } from './ui/FolderSuggest';
-import { SettingsSection } from './section';
+import type { SettingsSection } from './section';
 
 /**
  * Clearing runs with auto-generation switched off, otherwise the notes it

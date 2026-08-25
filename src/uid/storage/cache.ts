@@ -1,5 +1,5 @@
 import { TFile } from 'obsidian';
-import { UidContext } from '../model/context';
+import type { UidContext } from '../model/context';
 import { getUIDFromFile } from './frontmatter';
 
 /**

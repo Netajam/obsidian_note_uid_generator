@@ -1,7 +1,7 @@
 import { Notice } from 'obsidian';
 import { v4 as uuidv4 } from 'uuid';
 import { ulid } from 'ulid';
-import { UidContext } from './model/context';
+import type { UidContext } from './model/context';
 import { generateNanoID } from './generators/nanoid';
 import { generateSnowflakeID } from './generators/snowflake';
 import { detectNodeId, resolveAutoDetectedNodeId } from './generators/nodeId';

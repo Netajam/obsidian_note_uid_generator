@@ -1,5 +1,5 @@
 import { App } from 'obsidian';
-import type { UIDGeneratorSettings } from './settings';
+import type { UIDGeneratorSettings } from '../settings';
 
 /**
  * What the uid domain reads and writes: the vault, the settings values, and

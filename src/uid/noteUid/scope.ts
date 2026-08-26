@@ -1,5 +1,5 @@
 import { normalizePath, TFile } from 'obsidian';
-import type { UIDGeneratorSettings } from '../settings';
+import type { UIDGeneratorSettings } from '../../settings';
 
 /**
  * Whether a note is in scope for automatic uid generation. Both callers of

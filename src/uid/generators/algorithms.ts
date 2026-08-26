@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import { ulid } from 'ulid';
-import type { UIDGeneratorSettings } from '../settings';
+import type { UIDGeneratorSettings } from '../../settings';
 import { generateNanoID } from './nanoid';
 import { generateSnowflakeID } from './snowflake';
 import { detectNodeId, resolveAutoDetectedNodeId } from './nodeId';

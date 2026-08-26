@@ -1,5 +1,5 @@
 import { Setting } from 'obsidian';
-import { DEFAULT_SETTINGS } from '../../../uid/settings';
+import { DEFAULT_SETTINGS } from '../../../settings';
 import { buildUidCache } from '../../../uid/storage/cache';
 import type { SettingsSection } from '../section';
 import { renderNanoidOptions } from './nanoidOptions';

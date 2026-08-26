@@ -102,6 +102,13 @@
     white-space: nowrap;
 }
 
+.uid-duplicate-report .setting-item-control {
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
 .uid-duplicate-report .setting-item-control button {
     flex-shrink: 0;
+    white-space: nowrap;
 }

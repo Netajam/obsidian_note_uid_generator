@@ -160,6 +160,32 @@ function registerAutoGeneration(host: Plugin, ctx: UidContext): void {
 	});
 }
 
+/** Remembers each newly created note, and follows it, until Obsidian indexes it. */
+function trackNewNotes(host: Plugin, pending: Set<string>): void {
+	host.registerEvent(host.app.vault.on('create', (file) => {
+		if (asNote(file)) pending.add(file.path);
+	}));
+
+	// Obsidian's own "new note" flow creates `Untitled.md` and renames it before
+	// anything is indexed, so a tracked note has to be followed across.
+	host.registerEvent(host.app.vault.on('rename', (file, oldPath) => {
+		if (pending.delete(oldPath) && asNote(file)) pending.add(file.path);
+	}));
+
+	// A note deleted before it was ever indexed would sit in the set forever.
+	host.registerEvent(host.app.vault.on('delete', (file) => pending.delete(file.path)));
+}
+
+/** Checks a tracked note the first time its frontmatter is indexed, and only then. */
+function onFirstIndex(host: Plugin, ctx: UidContext, pending: Set<string>): void {
+	host.registerEvent(host.app.metadataCache.on('changed', (file) => {
+		const note = asNote(file);
+		// `delete` answers false for a note that was not awaiting its first
+		// index — an ordinary edit, which this must not act on.
+		if (note && pending.delete(note.path)) handleDuplicateUidCheck(ctx, note);
+	}));
+}
+
 /**
  * Watches for a newly created note that arrived carrying somebody else's uid.
  *
@@ -178,25 +204,8 @@ function registerDuplicateWatch(host: Plugin, ctx: UidContext): void {
 	const awaitingFirstIndex = new Set<string>();
 
 	host.app.workspace.onLayoutReady(() => {
-		host.registerEvent(host.app.vault.on('create', (file) => {
-			if (asNote(file)) awaitingFirstIndex.add(file.path);
-		}));
-
-		host.registerEvent(host.app.metadataCache.on('changed', (file) => {
-			const note = asNote(file);
-			// `delete` returns false for a note that was not awaiting its first
-			// index — an ordinary edit, which this must not act on.
-			if (note && awaitingFirstIndex.delete(note.path)) handleDuplicateUidCheck(ctx, note);
-		}));
-
-		// Obsidian's own "new note" flow creates `Untitled.md` and renames it
-		// before anything is indexed, so the note has to be followed across.
-		host.registerEvent(host.app.vault.on('rename', (file, oldPath) => {
-			if (awaitingFirstIndex.delete(oldPath) && asNote(file)) awaitingFirstIndex.add(file.path);
-		}));
-
-		// A note deleted before it was ever indexed would sit in the set forever.
-		host.registerEvent(host.app.vault.on('delete', (file) => awaitingFirstIndex.delete(file.path)));
+		trackNewNotes(host, awaitingFirstIndex);
+		onFirstIndex(host, ctx, awaitingFirstIndex);
 	});
 }
 

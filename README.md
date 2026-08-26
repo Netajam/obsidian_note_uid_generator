@@ -14,7 +14,8 @@ The UID Generator plugin for Obsidian provides tools to create and manage unique
 *   **Collision Avoidance:** An in-memory index of every UID in the vault ensures newly *generated* IDs are unique, with automatic retry on collision.
 *   **Duplicate Detection:** Catches UIDs that were never generated here — a note copied, synced in, or made from a template arrives carrying somebody else's UID, which collision avoidance cannot see.
     *   **On new notes:** When a note is created carrying a UID another note already has, the plugin can show a notice or generate a fresh UID for the newcomer (never for the note it came from). Configurable, including off.
-    *   **Vault-wide scan:** A settings button lists every UID more than one note carries. For each group you pick which note keeps the UID; the rest get fresh ones.
+    *   **Vault-wide scan:** Lists every UID more than one note carries — from the ribbon, the command palette, or a settings button. For each note you can either keep its UID (the rest of the group gets fresh ones) or give just that one a fresh UID.
+    *   **Type-agnostic:** The scan groups notes by the raw value under your configured UID key, so UUIDs, NanoIDs, ULIDs and Snowflakes are all compared together — switching generator algorithms never hides a duplicate.
 *   **Generate/Update UID:** Manually generate a new UID for the current note, optionally overwriting any existing UID under the configured key.
 *   **Create UID If Missing:** Manually generate a UID for the current note *only* if one doesn't already exist.
 *   **Remove UID:** Manually remove the UID from the current note's frontmatter.
@@ -55,11 +56,14 @@ The plugin provides the following commands accessible from the command palette (
 *   **`UID Generator: Copy [YourKeyName] of current note`:** Copies the UID value to the clipboard. (Only available if the current note has a UID).
 *   **`UID Generator: Copy title + [YourKeyName]`:** Copies the current note's title and UID using the configured format. (Always available if a note is open).
 *   **`UID Generator: Copy titles+[YourKeyName]s for selected files`:** Copies the titles and UIDs for all *Markdown* files currently selected in the file explorer, using the configured format. (Only available when the file explorer is active and has Markdown files selected).
+*   **`UID Generator: Scan for duplicate [YourKeyName]s`:** Reads every note in the vault and opens a report of the UIDs more than one note carries. Reports a notice instead when there are none.
 
-### Ribbon Icon
+### Ribbon Icons
 
-*   A ribbon icon (looks like a scan/search symbol) is added to the left sidebar.
-*   Clicking this icon performs the **`Create [YourKeyName] if missing`** action on the currently active note.
+Two ribbon icons are added to the left sidebar:
+
+*   **Fingerprint:** performs the **`Create [YourKeyName] if missing`** action on the currently active note.
+*   **Magnifier:** runs **`Scan for duplicate [YourKeyName]s`** over the whole vault.
 
 ### Context Menus
 
@@ -88,7 +92,10 @@ Access the plugin settings from Obsidian Settings -> Community Plugins -> UID Ge
     *   **Excluded Folders:** Click "Manage Exclusions" to open a modal where you can search, add, or remove folders that should be ignored by automatic generation. The current list is displayed below the button.
 *   **Duplicate UIDs:**
     *   **On a new note arriving with a duplicate UID:** `Do nothing`, `Show a notice` (default), or `Generate a fresh UID`. Only ever applies to notes as they are created — an existing note you merely edit is never rewritten, so the note a copy was taken from keeps its UID.
-    *   **Scan the vault for duplicate UIDs:** Reads every note and opens a report of the UIDs more than one note carries. Each group lists its notes oldest first; "Keep this one" gives the others fresh UIDs, and "Keep the oldest in each" does that for every group at once.
+    *   **Scan the vault for duplicate UIDs:** Reads every note and opens a report of the UIDs more than one note carries. Also available from the ribbon and the command palette. Each group lists its notes oldest first, and each note offers two ways out:
+        *   **Keep this one** — this note keeps the UID; every other note in the group gets a fresh one. Best when you know which note is the original.
+        *   **New UID for this one** — only this note gets a fresh UID; the rest of the group is left alone. Best when you know which note is the copy, or when resolving a large group one note at a time.
+        *   **Keep the oldest in each** resolves every group at once, keeping the oldest note in each.
 *   **Copy Format:**
     *   **Format (UID exists):** Define the template for copied text when a UID is present. Use placeholders `{title}`, `{uid}`, `{uidKey}`. (Default: `{title} - {uidKey}: {uid}`)
     *   **Format (UID missing):** Define the template for copied text when a UID is missing. Use placeholders `{title}`, `{uidKey}`. (Default: `{title} - No {uidKey}`)
@@ -130,7 +137,8 @@ The code splits in two: `src/uid` is the domain (what a uid is and what can be d
 *   `src/main.ts`: The Obsidian entry point (`UIDGenerator`, `onload`), which does nothing but start the plugin.
 *   `src/plugin/`: `register.ts` wires every surface into Obsidian; `state.ts` adapts Obsidian's persistence to the domain's port.
 *   `src/plugin/commands/`: Command, ribbon and context-menu handlers, registered by `commands/register.ts`.
-*   `src/plugin/settings/`: `SettingsTab.ts` plus one folder per settings feature — `generator/`, `autoGeneration/`, `duplicates/`, `clearing/` — each owning the widgets and vault pass it uses.
+*   `src/plugin/settings/`: `SettingsTab.ts` plus one folder per settings feature — `generator/`, `autoGeneration/`, `clearing/` — each owning the widgets and vault pass it uses.
+*   `src/plugin/duplicates/`: The duplicate scan, its report modal and its settings section. It sits beside `commands/` and `settings/` because it is both, and `plugin/register.ts` wires it into each.
 *   `src/uid/`: `context.ts` (what the domain needs from its host), `settings.ts` (the persisted shape, defaults and migration), `noteUid.ts` (read/ensure/renew/clear one note's uid), `bulk.ts` (vault-wide passes), `duplicates.ts` (notes sharing a uid), `scope.ts`, `folderNotes.ts`.
 *   `src/uid/generators/`: `generate.ts` (unique ids, retrying past collisions) over the UUID, NanoID, ULID and Snowflake modules.
 *   `src/uid/storage/`: Frontmatter read/write, the `UidIndex` of which notes carry which uid, and the vault sync that keeps it current.

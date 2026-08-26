@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { findDuplicateUids, notesSharingUidWith, resolveDuplicateUids } from './duplicates';
+import { findDuplicateUids, notesSharingUidWith, renewUids } from './duplicates';
 import { makeFakeApp } from '../../tests/fakes/app';
 
 /**
@@ -112,40 +112,51 @@ describe('notesSharingUidWith', () => {
 	});
 });
 
-describe('resolveDuplicateUids', () => {
-	it('renews every note but the one kept', async () => {
-		const app = makeFakeApp({
+describe('renewUids', () => {
+	/** A group of three notes sharing one uid, oldest first. */
+	function makeGroupOfThree() {
+		return makeFakeApp({
 			files: [
 				{ path: 'original.md', frontmatter: { uid: 'AAA' }, ctime: 100 },
 				{ path: 'copy.md', frontmatter: { uid: 'AAA' }, ctime: 200 },
 				{ path: 'copy2.md', frontmatter: { uid: 'AAA' }, ctime: 300 },
 			],
 		});
+	}
+
+	it('renews the notes it is given and reports which took', async () => {
+		const app = makeGroupOfThree();
 		const [group] = findDuplicateUids(app.plugin);
 
-		expect(await resolveDuplicateUids(app.plugin, group, group.notes[0])).toBe(2);
+		const renewed = await renewUids(app.plugin, group.notes.slice(1));
 
+		expect(renewed.map(note => note.path)).toEqual(['copy.md', 'copy2.md']);
 		expect(app.frontmatterByPath.get('original.md')?.uid).toBe('AAA');
 		expect(app.frontmatterByPath.get('copy.md')?.uid).not.toBe('AAA');
-		expect(app.frontmatterByPath.get('copy2.md')?.uid).not.toBe('AAA');
 		expect(findDuplicateUids(app.plugin)).toEqual([]);
 	});
 
-	it('keeps whichever note the user picked, not just the oldest', async () => {
-		const app = makeFakeApp({
-			files: [
-				{ path: 'original.md', frontmatter: { uid: 'AAA' }, ctime: 100 },
-				{ path: 'copy.md', frontmatter: { uid: 'AAA' }, ctime: 200 },
-			],
-		});
+	it('renews just one note, leaving the rest of the group sharing', async () => {
+		// The 'give this one a new uid' half of the report: a three-note group
+		// is still a duplicate afterwards, with one fewer note in it.
+		const app = makeGroupOfThree();
 		const [group] = findDuplicateUids(app.plugin);
-		const copy = group.notes[group.notes.length - 1];
-		expect(copy.path).toBe('copy.md');
 
-		await resolveDuplicateUids(app.plugin, group, copy);
+		await renewUids(app.plugin, [group.notes[2]]);
 
-		expect(app.frontmatterByPath.get('copy.md')?.uid).toBe('AAA');
+		expect(app.frontmatterByPath.get('copy2.md')?.uid).not.toBe('AAA');
+		const [remaining] = findDuplicateUids(app.plugin);
+		expect(remaining.notes.map(note => note.path)).toEqual(['original.md', 'copy.md']);
+	});
+
+	it('can renew the oldest note, when that is the one the user calls the copy', async () => {
+		const app = makeGroupOfThree();
+		const [group] = findDuplicateUids(app.plugin);
+
+		await renewUids(app.plugin, [group.notes[0]]);
+
 		expect(app.frontmatterByPath.get('original.md')?.uid).not.toBe('AAA');
+		expect(app.frontmatterByPath.get('copy.md')?.uid).toBe('AAA');
 	});
 
 	it('never hands out a uid the vault still holds', async () => {
@@ -158,8 +169,15 @@ describe('resolveDuplicateUids', () => {
 		});
 		const [group] = findDuplicateUids(app.plugin);
 
-		await resolveDuplicateUids(app.plugin, group, group.notes[0]);
+		await renewUids(app.plugin, [group.notes[1]]);
 
 		expect(app.uidIndex.owners('AAA')).toEqual(['original.md']);
+	});
+
+	it('does nothing when given nothing', async () => {
+		const app = makeGroupOfThree();
+
+		expect(await renewUids(app.plugin, [])).toEqual([]);
+		expect(app.processFrontMatter).not.toHaveBeenCalled();
 	});
 });

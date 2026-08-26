@@ -10,3 +10,11 @@ export interface SettingsSection {
 	ctx: UidContext;
 	refresh(): void;
 }
+
+/**
+ * How a section is drawn — the shape every `render*Section` already has.
+ *
+ * Named so that a feature living outside this folder can hand its section to
+ * the tab without the tab having to reach across and fetch it.
+ */
+export type RenderSettingsSection = (section: SettingsSection) => void;

@@ -74,23 +74,23 @@ export function notesSharingUidWith(ctx: UidStore, file: TFile): string[] {
 }
 
 /**
- * Gives every note in the group except `keep` a fresh uid.
+ * Gives each of `notes` a fresh uid.
  *
  * Renewing rather than clearing is the point: a note that loses its uid has no
  * identity at all, which is worse than sharing one.
  *
- * @returns How many notes were renewed. A shortfall means a write failed, and
- * `renewUid` has already reported it.
+ * Takes the notes to renew rather than a group and the one to keep, because
+ * the caller resolves a group from either end — naming the note that keeps the
+ * uid, or naming a note that should give it up — and both come down to the
+ * same list.
+ *
+ * @returns The notes that actually got one. A note missing from the result had
+ * its write fail, and `renewUid` has already reported that.
  */
-export async function resolveDuplicateUids(
-	ctx: UidStore,
-	group: DuplicateUidGroup,
-	keep: TFile,
-): Promise<number> {
-	let renewed = 0;
-	for (const note of group.notes) {
-		if (note.path === keep.path) continue;
-		if (await renewUid(ctx, note)) renewed++;
+export async function renewUids(ctx: UidStore, notes: TFile[]): Promise<TFile[]> {
+	const renewed: TFile[] = [];
+	for (const note of notes) {
+		if (await renewUid(ctx, note)) renewed.push(note);
 	}
 	return renewed;
 }

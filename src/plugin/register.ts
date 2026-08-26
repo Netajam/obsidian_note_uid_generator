@@ -3,6 +3,7 @@ import { buildUidIndex, forgetFile, syncUidFromFrontmatter } from '../uid/storag
 import type { UidContext } from '../uid/context';
 import { loadUidState } from './state';
 import { registerUidCommands } from './commands/register';
+import { registerDuplicateScan, renderDuplicatesSection } from './duplicates/duplicates';
 import { UIDSettingTab } from './settings/SettingsTab';
 
 /**
@@ -47,5 +48,6 @@ export async function startUidGenerator(host: Plugin): Promise<void> {
 	// looks at it.
 	registerIndexMaintenance(host, ctx);
 	registerUidCommands(host, ctx);
-	host.addSettingTab(new UIDSettingTab(host, ctx));
+	registerDuplicateScan(host, ctx);
+	host.addSettingTab(new UIDSettingTab(host, ctx, [renderDuplicatesSection]));
 }

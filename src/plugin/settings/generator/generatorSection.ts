@@ -1,6 +1,6 @@
 import { Setting } from 'obsidian';
 import { DEFAULT_SETTINGS } from '../../../settings';
-import { buildUidCache } from '../../../uid/storage/cache';
+import { buildUidIndex } from '../../../uid/storage/vaultSync';
 import type { SettingsSection } from '../section';
 import { renderNanoidOptions } from './nanoidOptions';
 import { renderSnowflakeOptions } from './snowflakeOptions';
@@ -35,8 +35,8 @@ function renderUidKey({ containerEl, ctx, refresh }: SettingsSection): void {
 				}
 				await ctx.saveSettings();
 				if (keyChanged) {
-					// The cache is keyed by the old property; it no longer describes the vault.
-					buildUidCache(ctx);
+					// The index is keyed by the old property; it no longer describes the vault.
+					buildUidIndex(ctx);
 				}
 				refresh();
 			}));

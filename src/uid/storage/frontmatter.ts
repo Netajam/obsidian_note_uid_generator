@@ -1,5 +1,6 @@
 import { App, Notice, TAbstractFile, TFile } from 'obsidian';
 import { isMarkdownNote } from './note';
+import type { UidIndex } from './uidIndex';
 
 /**
  * What reading and writing a note's uid needs: the vault, the configured key,
@@ -7,16 +8,14 @@ import { isMarkdownNote } from './note';
  *
  * Named here rather than taken from `UidContext` so this folder depends on the
  * uid *key* and not on every setting sitting beside it — and so a test can
- * drive it with four fields instead of seventeen. `UidStore` satisfies it
+ * drive it with three fields instead of eighteen. `UidStore` satisfies it
  * structurally, so callers still hand over the whole context.
  */
 export interface UidRecordStore {
 	app: App;
 	settings: { uidKey: string };
-	/** Every uid currently present in the vault — used for collision detection. */
-	uidCache: Set<string>;
-	/** File path → uid, so deletions can evict from `uidCache` without metadata. */
-	uidPathMap: Map<string, string>;
+	/** Which notes carry which uid — kept in step by every write below. */
+	uidIndex: UidIndex;
 }
 
 const ERROR_NOTICE_MS = 5000;
@@ -28,7 +27,7 @@ const ALTERNATE_UID_KEYS = ['uid', 'Uid', 'UID'];
  * Retrieves the UID for a given file, respecting the custom key setting.
  *
  * Takes any vault entry and answers null for the ones that are not notes, so
- * that a caller holding whatever a vault event handed it — the uid cache, say
+ * that a caller holding whatever a vault event handed it — the uid index, say
  * — asks the same question as one holding a note.
  *
  * Returns null if the file has no frontmatter, no uid, or could not be read.
@@ -99,10 +98,7 @@ export async function setUID(ctx: UidRecordStore, file: TFile, uid: string, over
 			uidWasWritten = applyUid(frontmatter, key, uid, overwrite);
 		});
 
-		if (uidWasWritten) {
-			ctx.uidCache.add(uid);
-			ctx.uidPathMap.set(file.path, uid);
-		}
+		if (uidWasWritten) ctx.uidIndex.set(file.path, uid);
 		return uidWasWritten;
 	} catch (error) {
 		console.error(`[UIDGenerator] Error processing frontmatter for ${file.path} during setUID:`, error);
@@ -120,20 +116,16 @@ export async function removeUID(ctx: UidRecordStore, file: TFile): Promise<boole
 
 	const key = ctx.settings.uidKey;
 	let uidWasPresent = false;
-	let removedUid = '';
 
 	try {
 		await ctx.app.fileManager.processFrontMatter(file, (frontmatter) => {
 			if (Object.prototype.hasOwnProperty.call(frontmatter, key)) {
-				removedUid = String(frontmatter[key]);
 				uidWasPresent = true;
 				delete frontmatter[key];
 			}
 		});
-		if (uidWasPresent && removedUid) {
-			ctx.uidCache.delete(removedUid);
-			ctx.uidPathMap.delete(file.path);
-		}
+		// The index is keyed by path, so it needs no reminder of which uid came off.
+		if (uidWasPresent) ctx.uidIndex.forget(file.path);
 		return uidWasPresent;
 	} catch (error) {
 		console.error(`[UIDGenerator] Error processing frontmatter for ${file.path} during removal:`, error);

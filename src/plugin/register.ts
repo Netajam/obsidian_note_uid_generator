@@ -1,5 +1,5 @@
 import { Plugin } from 'obsidian';
-import { buildUidCache, forgetFile, syncUidFromFrontmatter } from '../uid/storage/cache';
+import { buildUidIndex, forgetFile, syncUidFromFrontmatter } from '../uid/storage/vaultSync';
 import type { UidContext } from '../uid/context';
 import { loadUidState } from './state';
 import { registerUidCommands } from './commands/register';
@@ -12,18 +12,26 @@ import { UIDSettingTab } from './settings/SettingsTab';
  */
 
 /**
- * Keeps the uid cache in step with the vault. Deferred to layout-ready so the
- * cache is built from a fully indexed vault before anything reads it.
+ * Keeps the uid index in step with the vault. Deferred to layout-ready so the
+ * index is built from a fully indexed vault before anything reads it.
  */
-function registerCacheMaintenance(host: Plugin, ctx: UidContext): void {
+function registerIndexMaintenance(host: Plugin, ctx: UidContext): void {
 	host.app.workspace.onLayoutReady(() => {
-		buildUidCache(ctx);
+		buildUidIndex(ctx);
 
 		// Files dropped or synced in may already carry a uid. Which vault
-		// entries are notes is the cache's own rule, so these forward the
+		// entries are notes is the index's own rule, so these forward the
 		// event and nothing more.
 		host.registerEvent(host.app.vault.on('create', (file) => syncUidFromFrontmatter(ctx, file)));
 		host.registerEvent(host.app.vault.on('delete', (file) => forgetFile(ctx, file.path)));
+
+		// A rename moves the note the index is keyed by. Without this the old
+		// path keeps its entry, so the uid reads as belonging to two notes —
+		// one of which no longer exists.
+		host.registerEvent(host.app.vault.on('rename', (file, oldPath) => {
+			forgetFile(ctx, oldPath);
+			syncUidFromFrontmatter(ctx, file);
+		}));
 
 		// Frontmatter edited by the user or another plugin.
 		host.registerEvent(host.app.metadataCache.on('changed', (file) => syncUidFromFrontmatter(ctx, file)));
@@ -34,9 +42,10 @@ function registerCacheMaintenance(host: Plugin, ctx: UidContext): void {
 export async function startUidGenerator(host: Plugin): Promise<void> {
 	const ctx = await loadUidState(host);
 
-	// Registered first so the cache is built, and a created file is reconciled
-	// against its frontmatter, before auto-generation looks at it.
-	registerCacheMaintenance(host, ctx);
+	// Registered first so the index is built, and a created file is reconciled
+	// against its frontmatter, before auto-generation or the duplicate watch
+	// looks at it.
+	registerIndexMaintenance(host, ctx);
 	registerUidCommands(host, ctx);
 	host.addSettingTab(new UIDSettingTab(host, ctx));
 }

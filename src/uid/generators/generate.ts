@@ -28,11 +28,11 @@ function warnCollisionExhausted(ctx: UidStore): void {
 	);
 }
 
-/** Generates a unique ID with the configured algorithm, retrying past cached collisions. */
+/** Generates a unique ID with the configured algorithm, retrying past uids the vault already holds. */
 export function generateUID(ctx: UidStore): string {
 	for (let attempt = 0; attempt < MAX_COLLISION_RETRIES; attempt++) {
 		const id = generateRawUID(ctx.settings);
-		if (!ctx.uidCache.has(id)) {
+		if (!ctx.uidIndex.has(id)) {
 			return id;
 		}
 		console.warn(`[UIDGenerator] Collision detected, retrying (${attempt + 1}/${MAX_COLLISION_RETRIES})`);

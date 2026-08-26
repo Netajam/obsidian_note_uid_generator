@@ -1,9 +1,10 @@
 import { App } from 'obsidian';
 import type { UIDGeneratorSettings } from '../settings';
+import type { UidIndex } from './storage/uidIndex';
 
 /**
  * What the uid domain reads and writes: the vault, the settings values, and
- * the collision caches.
+ * the index of which note carries which uid.
  *
  * It stops deliberately short of `saveSettings`. The domain does change
  * settings in place — a migration, a refreshed Snowflake node id — but *when*
@@ -14,10 +15,8 @@ import type { UIDGeneratorSettings } from '../settings';
 export interface UidStore {
 	app: App;
 	settings: UIDGeneratorSettings;
-	/** Every uid currently present in the vault — used for collision detection. */
-	uidCache: Set<string>;
-	/** File path → uid, so deletions can evict from `uidCache` without metadata. */
-	uidPathMap: Map<string, string>;
+	/** Which notes carry which uid — read by collision detection and duplicate detection alike. */
+	uidIndex: UidIndex;
 }
 
 /**

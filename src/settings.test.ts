@@ -24,6 +24,13 @@ describe('migrateSettings — a fresh install', () => {
 		expect(settings.uidGenerator).toBe(DEFAULT_SETTINGS.uidGenerator);
 		expect(needsSave).toBe(false);
 	});
+
+	it('gives settings written before the duplicate check existed its default, without a rewrite', () => {
+		const { settings, needsSave } = migrateSettings({ uidKey: 'uid', autoGenerateUid: true });
+
+		expect(settings.duplicateUidCheck).toBe('notify');
+		expect(needsSave).toBe(false);
+	});
 });
 
 describe('migrateSettings — repairing malformed values', () => {

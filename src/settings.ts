@@ -23,6 +23,8 @@ export interface UIDGeneratorSettings {
 	autoGenerationFolder: string;   // kept for migration from older versions
 	autoGenerationFolders: string[];
 	autoGenerationExclusions: string[];
+	/** What to do when a note turns up carrying a uid another note already has. */
+	duplicateUidCheck: 'off' | 'notify' | 'regenerate';
 	folderToClear: string;
 	copyFormatString: string;
 	copyFormatStringMissingUid: string;
@@ -41,6 +43,7 @@ export const DEFAULT_SETTINGS: UIDGeneratorSettings = {
 	autoGenerationFolder: '',
 	autoGenerationFolders: [],
 	autoGenerationExclusions: [],
+	duplicateUidCheck: 'notify',
 	folderToClear: '',
 	copyFormatString: '{title} - {uidKey}: {uid}',
 	copyFormatStringMissingUid: '{title} - No {uidKey}',

@@ -2,6 +2,7 @@ import { Plugin, PluginSettingTab } from 'obsidian';
 import type { UidContext } from '../../uid/context';
 import { renderAutoGenerationSection } from './autoGeneration/autoGenerationSection';
 import { renderClearingSection } from './clearing/clearingSection';
+import { renderDuplicatesSection } from './duplicates/duplicatesSection';
 import { renderCopyFormatSection } from './copyFormatSection';
 import { renderGeneratorSection } from './generator/generatorSection';
 import type { SettingsSection } from './section';
@@ -26,6 +27,7 @@ export class UIDSettingTab extends PluginSettingTab {
 
 		renderGeneratorSection(section);
 		renderAutoGenerationSection(section);
+		renderDuplicatesSection(section);
 		renderCopyFormatSection(section);
 		renderClearingSection(section);
 	}

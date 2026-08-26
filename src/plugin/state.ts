@@ -2,6 +2,7 @@ import { Plugin } from 'obsidian';
 import { refreshMachineNodeId } from '../uid/generators/generate';
 import type { UidContext } from '../uid/context';
 import { migrateSettings, type UIDGeneratorSettings } from '../settings';
+import { UidIndex } from '../uid/storage/uidIndex';
 
 /**
  * The adapter that satisfies the uid domain's `UidContext` port using
@@ -12,8 +13,7 @@ import { migrateSettings, type UIDGeneratorSettings } from '../settings';
  * what the uid domain keeps in it.
  */
 class UidState implements UidContext {
-	readonly uidCache = new Set<string>();
-	readonly uidPathMap = new Map<string, string>();
+	readonly uidIndex = new UidIndex();
 
 	constructor(private host: Plugin, public settings: UIDGeneratorSettings) {}
 

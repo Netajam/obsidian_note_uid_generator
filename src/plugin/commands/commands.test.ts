@@ -160,7 +160,7 @@ describe('handleAutoGenerateUid — settings-driven decisions', () => {
 			const after = app.frontmatterByPath.get(c.filePath) ?? {};
 			if (c.shouldGenerate) {
 				expect(after.uid).toMatch(UUID_RE);
-				expect(app.plugin.uidCache.has(after.uid as string)).toBe(true);
+				expect(app.uidIndex.has(after.uid as string)).toBe(true);
 			} else if (c.existingUid) {
 				expect(after.uid).toBe(c.existingUid);
 			} else {

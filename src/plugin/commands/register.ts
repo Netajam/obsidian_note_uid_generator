@@ -3,6 +3,7 @@ import {
 } from 'obsidian';
 import type { UidContext } from '../../uid/context';
 import { handleAutoGenerateUid } from './autoGenerate';
+import { handleDuplicateUidCheck } from './duplicateWatch';
 import {
 	handleCopyTitleUid, handleCopyTitlesAndUidsForMultipleFiles,
 	handleCopyTitlesAndUidsForSelection, handleCopyTitlesAndUidsFromFolder, handleCopyUid,
@@ -159,6 +160,46 @@ function registerAutoGeneration(host: Plugin, ctx: UidContext): void {
 	});
 }
 
+/**
+ * Watches for a newly created note that arrived carrying somebody else's uid.
+ *
+ * It takes two events to see one, because neither is enough on its own.
+ * `vault.on('create')` says a note is new but fires before Obsidian has parsed
+ * it, so the uid it came with is not readable yet; the first `metadataCache`
+ * 'changed' for that path is where the uid appears, but that event says
+ * nothing about the note being new — it fires again on every later edit.
+ * Pairing them confines the check to notes that are genuinely new, which is
+ * both the case worth checking and the only case where renewing a uid is safe.
+ *
+ * Deferred to layout-ready for the same reason auto-generation is: the startup
+ * sweep of file events must not be mistaken for the user creating notes.
+ */
+function registerDuplicateWatch(host: Plugin, ctx: UidContext): void {
+	const awaitingFirstIndex = new Set<string>();
+
+	host.app.workspace.onLayoutReady(() => {
+		host.registerEvent(host.app.vault.on('create', (file) => {
+			if (asNote(file)) awaitingFirstIndex.add(file.path);
+		}));
+
+		host.registerEvent(host.app.metadataCache.on('changed', (file) => {
+			const note = asNote(file);
+			// `delete` returns false for a note that was not awaiting its first
+			// index — an ordinary edit, which this must not act on.
+			if (note && awaitingFirstIndex.delete(note.path)) handleDuplicateUidCheck(ctx, note);
+		}));
+
+		// Obsidian's own "new note" flow creates `Untitled.md` and renames it
+		// before anything is indexed, so the note has to be followed across.
+		host.registerEvent(host.app.vault.on('rename', (file, oldPath) => {
+			if (awaitingFirstIndex.delete(oldPath) && asNote(file)) awaitingFirstIndex.add(file.path);
+		}));
+
+		// A note deleted before it was ever indexed would sit in the set forever.
+		host.registerEvent(host.app.vault.on('delete', (file) => awaitingFirstIndex.delete(file.path)));
+	});
+}
+
 /** Wires every uid command in this folder into Obsidian. Called once, at startup. */
 export function registerUidCommands(host: Plugin, ctx: UidContext): void {
 	registerRibbon(host, ctx);
@@ -166,4 +207,5 @@ export function registerUidCommands(host: Plugin, ctx: UidContext): void {
 	registerFileMenu(host, ctx);
 	registerFilesMenu(host, ctx);
 	registerAutoGeneration(host, ctx);
+	registerDuplicateWatch(host, ctx);
 }

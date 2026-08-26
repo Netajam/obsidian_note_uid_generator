@@ -14,6 +14,11 @@ import { renderSnowflakeOptions } from './snowflakeOptions';
  * "the generator section".
  */
 
+/** No spaces, and an emptied field means the default rather than an unnamed key. */
+function normalizeUidKey(value: string): string {
+	return value.trim().replace(/\s+/g, '') || DEFAULT_SETTINGS.uidKey;
+}
+
 function renderUidKey({ containerEl, ctx, refresh }: SettingsSection): void {
 	new Setting(containerEl)
 		.setName('UID metadata key')
@@ -22,7 +27,7 @@ function renderUidKey({ containerEl, ctx, refresh }: SettingsSection): void {
 			.setPlaceholder('Default: uid')
 			.setValue(ctx.settings.uidKey)
 			.onChange(async (value) => {
-				const newKey = value.trim().replace(/\s+/g, '') || DEFAULT_SETTINGS.uidKey;
+				const newKey = normalizeUidKey(value);
 				const keyChanged = newKey !== ctx.settings.uidKey;
 				ctx.settings.uidKey = newKey;
 				if (value !== newKey) {

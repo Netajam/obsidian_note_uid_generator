@@ -4,12 +4,8 @@ import { ConfirmationModal } from './ConfirmationModal';
 import { FolderSuggest } from './FolderSuggest';
 import type { SettingsSection } from '../section';
 
-/** Bulk removal of uids from a folder. Destructive, so it goes through a confirmation modal. */
-export function renderClearingSection(section: SettingsSection): void {
-	const { containerEl, ctx, refresh } = section;
-
-	new Setting(containerEl).setName('Manual uid clearing').setHeading();
-
+/** Where to clear, with folder autocompletion. Saved as it is typed, so the button below can read it. */
+function renderFolderField({ containerEl, ctx }: SettingsSection): void {
 	new Setting(containerEl)
 		.setName('Folder to clear uids from')
 		.setDesc('Specify the vault path to remove uids from notes within.')
@@ -22,7 +18,10 @@ export function renderClearingSection(section: SettingsSection): void {
 					await ctx.saveSettings();
 				});
 		});
+}
 
+/** The destructive half: nothing happens until the user confirms the folder by name. */
+function renderClearButton({ containerEl, ctx, refresh }: SettingsSection): void {
 	new Setting(containerEl)
 		.setName('Clear uids in folder')
 		.setDesc(`WARNING: This permanently removes the "${ctx.settings.uidKey}" metadata from notes in the specified folder/subfolders and temporarily disables auto-generation.`)
@@ -41,4 +40,12 @@ export function renderClearingSection(section: SettingsSection): void {
 					refresh();
 				}).open();
 			}));
+}
+
+/** Bulk removal of uids from a folder. Destructive, so it goes through a confirmation modal. */
+export function renderClearingSection(section: SettingsSection): void {
+	new Setting(section.containerEl).setName('Manual uid clearing').setHeading();
+
+	renderFolderField(section);
+	renderClearButton(section);
 }

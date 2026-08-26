@@ -1,30 +1,40 @@
 const NODE_ID_COUNT = 1024;
 
+/** The MAC of the first external interface that reports one, or null when none does. */
+function firstExternalMac(): string | null {
+	// eslint-disable-next-line @typescript-eslint/no-var-requires
+	const os = require('os');
+	const interfaces = os.networkInterfaces();
+	for (const name of Object.keys(interfaces)) {
+		for (const iface of interfaces[name]) {
+			if (!iface.internal && iface.mac && iface.mac !== '00:00:00:00:00:00') return iface.mac;
+		}
+	}
+	return null;
+}
+
+/** Folds a MAC address into the 10-bit node ID space — same address, same ID, every session. */
+function hashToNodeId(mac: string): number {
+	const digits = mac.replace(/:/g, '');
+	let hash = 0;
+	for (let i = 0; i < digits.length; i++) {
+		hash = ((hash << 5) - hash + digits.charCodeAt(i)) | 0;
+	}
+	return Math.abs(hash) % NODE_ID_COUNT;
+}
+
 /**
  * Attempts to derive a stable 10-bit node ID (0-1023) from the machine's MAC address.
  * Available on Electron (desktop). Returns null on mobile or if detection fails.
  */
 export function detectNodeId(): number | null {
 	try {
-		// eslint-disable-next-line @typescript-eslint/no-var-requires
-		const os = require('os');
-		const interfaces = os.networkInterfaces();
-		for (const name of Object.keys(interfaces)) {
-			for (const iface of interfaces[name]) {
-				if (!iface.internal && iface.mac && iface.mac !== '00:00:00:00:00:00') {
-					const mac = iface.mac.replace(/:/g, '');
-					let hash = 0;
-					for (let i = 0; i < mac.length; i++) {
-						hash = ((hash << 5) - hash + mac.charCodeAt(i)) | 0;
-					}
-					return Math.abs(hash) % NODE_ID_COUNT;
-				}
-			}
-		}
+		const mac = firstExternalMac();
+		return mac === null ? null : hashToNodeId(mac);
 	} catch {
 		// os module not available (mobile)
+		return null;
 	}
-	return null;
 }
 
 /**

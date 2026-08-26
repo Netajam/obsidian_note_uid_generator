@@ -33,6 +33,17 @@ function summarize(tally: Tally): string {
 	return tally.errors > 0 ? `${summary}\n- Errors: ${tally.errors} (see console)` : summary;
 }
 
+/**
+ * Keeps a long pass honest with the user: refreshes the count on the notice
+ * every so often, and hands the UI thread back often enough that a very large
+ * vault does not freeze while the pass runs.
+ */
+async function betweenFiles(notice: Notice, header: string, done: number, total: number): Promise<void> {
+	if (done === 0) return;
+	if (done % PROGRESS_EVERY === 0) notice.setMessage(`${header}\n(${done}/${total})`);
+	if (done % YIELD_EVERY === 0) await new Promise(resolve => setTimeout(resolve, 0));
+}
+
 /** Adds a uid to every in-scope note that lacks one. */
 export async function addMissingUidsInScope(ctx: UidStore): Promise<void> {
 	const files = ctx.app.vault.getMarkdownFiles();
@@ -47,14 +58,8 @@ export async function addMissingUidsInScope(ctx: UidStore): Promise<void> {
 
 	try {
 		for (let i = 0; i < files.length; i++) {
-			if (i > 0 && i % PROGRESS_EVERY === 0) {
-				notice.setMessage(`${header}\n(${i}/${files.length})`);
-			}
+			await betweenFiles(notice, header, i, files.length);
 			await addUidIfMissing(ctx, files[i], tally);
-			if (i > 0 && i % YIELD_EVERY === 0) {
-				// Yield so a very large vault doesn't freeze the UI.
-				await new Promise(resolve => setTimeout(resolve, 0));
-			}
 		}
 	} finally {
 		notice.hide();
@@ -62,19 +67,40 @@ export async function addMissingUidsInScope(ctx: UidStore): Promise<void> {
 	}
 }
 
-/** Removes the uid from every note under `folderPath`. */
-export async function clearUIDsInFolder(ctx: UidStore, folderPath: string): Promise<void> {
+/** Resolves a user-supplied path to a folder, saying in a notice why it could not. */
+function resolveFolder(ctx: UidStore, folderPath: string): TFolder | null {
 	const normalizedFolderPath = normalizePath(folderPath);
 	if (!normalizedFolderPath) {
 		new Notice('Folder path empty.');
-		return;
+		return null;
 	}
 
 	const folder = ctx.app.vault.getAbstractFileByPath(normalizedFolderPath);
 	if (!(folder instanceof TFolder)) {
 		new Notice(`Folder not found or path is not a folder: ${folderPath}`);
-		return;
+		return null;
 	}
+	return folder;
+}
+
+/** Clears every file it is given, counting what came off and what threw. */
+async function clearUids(ctx: UidStore, files: TFile[]): Promise<{ cleared: number; errors: number }> {
+	let cleared = 0;
+	let errors = 0;
+	for (const file of files) {
+		try {
+			if (await clearUid(ctx, file)) cleared++;
+		} catch {
+			errors++;
+		}
+	}
+	return { cleared, errors };
+}
+
+/** Removes the uid from every note under `folderPath`. */
+export async function clearUIDsInFolder(ctx: UidStore, folderPath: string): Promise<void> {
+	const folder = resolveFolder(ctx, folderPath);
+	if (!folder) return;
 
 	new Notice(`Clearing ${ctx.settings.uidKey}s in "${folder.name}"... This may take a moment.`);
 
@@ -84,19 +110,11 @@ export async function clearUIDsInFolder(ctx: UidStore, folderPath: string): Prom
 		return;
 	}
 
-	let clearedCount = 0;
-	let errorCount = 0;
-	for (const file of files) {
-		try {
-			if (await clearUid(ctx, file)) clearedCount++;
-		} catch {
-			errorCount++;
-		}
-	}
+	const { cleared, errors } = await clearUids(ctx, files);
 
-	let message = `UID clearing complete for "${folder.name}". Removed ${clearedCount} ${ctx.settings.uidKey}s.`;
-	if (errorCount > 0) {
-		message += ` Encountered ${errorCount} errors (check console).`;
+	let message = `UID clearing complete for "${folder.name}". Removed ${cleared} ${ctx.settings.uidKey}s.`;
+	if (errors > 0) {
+		message += ` Encountered ${errors} errors (check console).`;
 	}
 	new Notice(message, SUMMARY_NOTICE_MS);
 }

@@ -39,6 +39,27 @@ function dropAlternateKeys(frontmatter: Record<string, unknown>, key: string): v
 	}
 }
 
+/** YAML can hold a uid as a number, and an emptied field as `''` — neither of those is a uid. */
+function hasUid(value: unknown): boolean {
+	return value !== undefined && value !== null && value !== '';
+}
+
+/**
+ * Applies the write to one file's frontmatter, leaving an existing uid alone
+ * unless asked to overwrite it.
+ *
+ * @returns True when the stored value actually changed — writing the uid a
+ * file already had is not a write worth reporting.
+ */
+function applyUid(frontmatter: Record<string, unknown>, key: string, uid: string, overwrite: boolean): boolean {
+	const currentUid = frontmatter[key];
+	if (hasUid(currentUid) && !overwrite) return false;
+
+	frontmatter[key] = uid;
+	dropAlternateKeys(frontmatter, key);
+	return currentUid !== uid;
+}
+
 /**
  * Sets or updates the UID property in a file's frontmatter.
  * @param overwrite If true, replaces an existing UID. If false, only sets a missing one.
@@ -58,15 +79,7 @@ export async function setUID(ctx: UidStore, file: TFile, uid: string, overwrite 
 
 	try {
 		await ctx.app.fileManager.processFrontMatter(file, (frontmatter) => {
-			const currentUid = frontmatter[key];
-			const uidExists = currentUid !== undefined && currentUid !== null && currentUid !== '';
-			if (uidExists && !overwrite) return;
-
-			// Only report a write when the value actually changes.
-			uidWasWritten = currentUid !== uid;
-			frontmatter[key] = uid;
-
-			dropAlternateKeys(frontmatter, key);
+			uidWasWritten = applyUid(frontmatter, key, uid, overwrite);
 		});
 
 		if (uidWasWritten) {

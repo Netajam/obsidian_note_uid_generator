@@ -32,54 +32,46 @@ function registerRibbon(host: Plugin, ctx: UidContext): void {
 	});
 }
 
+/** A command that acts on whatever note the editor holds — including none, which the handlers answer for. */
+function addEditorCommand(host: Plugin, id: string, name: string, run: (file: TFile | null) => void): void {
+	host.addCommand({
+		id,
+		name,
+		editorCallback: (editor: Editor, view: MarkdownView) => run(view.file),
+	});
+}
+
+/** A command Obsidian offers only when the editor holds a note, so it greys out on an empty pane. */
+function addNoteCommand(host: Plugin, id: string, name: string, run: (file: TFile) => void): void {
+	host.addCommand({
+		id,
+		name,
+		editorCheckCallback: (checking: boolean, editor: Editor, view: MarkdownView) => {
+			const file = view.file;
+			if (!file) return false;
+			if (!checking) run(file);
+			return true;
+		},
+	});
+}
+
 function registerPaletteCommands(host: Plugin, ctx: UidContext): void {
 	const { uidKey } = ctx.settings;
 
-	host.addCommand({
-		id: 'generate-update-uid',
-		name: `Generate/update ${uidKey} (Overwrites)`,
-		editorCallback: (editor: Editor, view: MarkdownView) => {
-			handleGenerateUpdateUid(ctx, view.file);
-		},
-	});
+	addEditorCommand(host, 'generate-update-uid', `Generate/update ${uidKey} (Overwrites)`,
+		file => handleGenerateUpdateUid(ctx, file));
 
-	host.addCommand({
-		id: 'create-uid-if-missing',
-		name: `Create ${uidKey} if missing`,
-		editorCallback: (editor: Editor, view: MarkdownView) => {
-			handleCreateUidIfMissing(ctx, view.file);
-		},
-	});
+	addEditorCommand(host, 'create-uid-if-missing', `Create ${uidKey} if missing`,
+		file => handleCreateUidIfMissing(ctx, file));
 
-	host.addCommand({
-		id: 'remove-uid',
-		name: `Remove ${uidKey} from current note`,
-		editorCallback: (editor: Editor, view: MarkdownView) => {
-			handleRemoveUid(ctx, view.file);
-		},
-	});
+	addEditorCommand(host, 'remove-uid', `Remove ${uidKey} from current note`,
+		file => handleRemoveUid(ctx, file));
 
-	host.addCommand({
-		id: 'copy-uid',
-		name: `Copy ${uidKey} of current note`,
-		editorCheckCallback: (checking: boolean, editor: Editor, view: MarkdownView) => {
-			const file = view.file;
-			if (!file) return false;
-			if (!checking) handleCopyUid(ctx, file);
-			return true;
-		},
-	});
+	addNoteCommand(host, 'copy-uid', `Copy ${uidKey} of current note`,
+		file => handleCopyUid(ctx, file));
 
-	host.addCommand({
-		id: 'copy-title-uid',
-		name: `Copy title + ${uidKey}`,
-		editorCheckCallback: (checking: boolean, editor: Editor, view: MarkdownView) => {
-			const file = view.file;
-			if (!file) return false;
-			if (!checking) handleCopyTitleUid(ctx, file);
-			return true;
-		},
-	});
+	addNoteCommand(host, 'copy-title-uid', `Copy title + ${uidKey}`,
+		file => handleCopyTitleUid(ctx, file));
 
 	host.addCommand({
 		id: 'copy-title-uid-for-selection',
@@ -97,7 +89,8 @@ function addCopyItem(menu: Menu, title: string, run: () => void): void {
 	menu.addItem(item => item.setTitle(title).setIcon('copy').onClick(run));
 }
 
-function registerContextMenus(host: Plugin, ctx: UidContext): void {
+/** Right-clicking one entry: a folder copies everything under it, a note copies itself. */
+function registerFileMenu(host: Plugin, ctx: UidContext): void {
 	const { uidKey } = ctx.settings;
 
 	host.registerEvent(host.app.workspace.on('file-menu', (menu: Menu, fileOrFolder: TAbstractFile) => {
@@ -112,8 +105,12 @@ function registerContextMenus(host: Plugin, ctx: UidContext): void {
 			addCopyItem(menu, `Copy title + ${uidKey}`, () => handleCopyTitleUid(ctx, note));
 		}
 	}));
+}
 
-	// `files-menu` is undocumented; see src/plugin/obsidian.d.ts.
+/** Right-clicking a multi-file selection. `files-menu` is undocumented; see src/plugin/obsidian.d.ts. */
+function registerFilesMenu(host: Plugin, ctx: UidContext): void {
+	const { uidKey } = ctx.settings;
+
 	host.registerEvent(host.app.workspace.on('files-menu',
 		(menu: Menu, files: TAbstractFile[], source: string) => {
 			if (source !== 'file-explorer-context-menu') return;
@@ -124,6 +121,24 @@ function registerContextMenus(host: Plugin, ctx: UidContext): void {
 			addCopyItem(menu, `Copy titles + ${uidKey}s for ${notes.length} selected`,
 				() => handleCopyTitlesAndUidsForMultipleFiles(ctx, notes));
 		}));
+}
+
+/** A note created in the vault — by the user, by a template, or by a sync coming in. */
+function onNoteCreated(host: Plugin, autoGenerate: (file: TFile) => void): void {
+	host.registerEvent(host.app.vault.on('create', (file) => {
+		const note = asNote(file);
+		if (note) autoGenerate(note);
+	}));
+}
+
+/** A note the user opened. `file-open` also fires for files opened off screen, which do not qualify. */
+function onNoteOpened(host: Plugin, autoGenerate: (file: TFile) => void): void {
+	host.registerEvent(host.app.workspace.on('file-open', (file) => {
+		const note = asNote(file);
+		if (note && host.app.workspace.getActiveViewOfType(MarkdownView)?.file === note) {
+			autoGenerate(note);
+		}
+	}));
 }
 
 /**
@@ -139,17 +154,8 @@ function registerAutoGeneration(host: Plugin, ctx: UidContext): void {
 	);
 
 	host.app.workspace.onLayoutReady(() => {
-		host.registerEvent(host.app.vault.on('create', (file) => {
-			const note = asNote(file);
-			if (note) autoGenerate(note);
-		}));
-
-		host.registerEvent(host.app.workspace.on('file-open', (file) => {
-			const note = asNote(file);
-			if (!note) return;
-			const view = host.app.workspace.getActiveViewOfType(MarkdownView);
-			if (view?.file === note) autoGenerate(note);
-		}));
+		onNoteCreated(host, autoGenerate);
+		onNoteOpened(host, autoGenerate);
 	});
 }
 
@@ -157,6 +163,7 @@ function registerAutoGeneration(host: Plugin, ctx: UidContext): void {
 export function registerUidCommands(host: Plugin, ctx: UidContext): void {
 	registerRibbon(host, ctx);
 	registerPaletteCommands(host, ctx);
-	registerContextMenus(host, ctx);
+	registerFileMenu(host, ctx);
+	registerFilesMenu(host, ctx);
 	registerAutoGeneration(host, ctx);
 }

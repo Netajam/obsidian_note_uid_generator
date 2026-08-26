@@ -13,12 +13,42 @@ const NANOID_MIN_LENGTH = 4;
 const NANOID_MAX_LENGTH = 128;
 const DEFAULT_SEPARATOR = { char: '-', position: -2 };
 
-function renderSeparatorGroup(section: SettingsSection, index: number): void {
-	const { containerEl, ctx, refresh } = section;
-	const separator = ctx.settings.nanoidSeparators[index];
-	const groupContainer = containerEl.createEl('div', { cls: 'uid-separator-group-container' });
+/** What the user typed, or undefined when it is not a number — a half-typed field must not be saved. */
+function parseInteger(value: string): number | undefined {
+	const num = parseInt(value);
+	return isNaN(num) ? undefined : num;
+}
 
-	new Setting(groupContainer)
+function renderLength({ containerEl, ctx }: SettingsSection): void {
+	new Setting(containerEl)
+		.setName('NanoID length')
+		.setDesc(`Length of the generated ID (excluding separators). Min ${NANOID_MIN_LENGTH}, max ${NANOID_MAX_LENGTH}.`)
+		.addText(text => text
+			.setValue(String(ctx.settings.nanoidLength))
+			.onChange(async (value) => {
+				const length = parseInteger(value);
+				if (length === undefined || length < NANOID_MIN_LENGTH || length > NANOID_MAX_LENGTH) return;
+				ctx.settings.nanoidLength = length;
+				await ctx.saveSettings();
+			}));
+}
+
+function renderAlphabet({ containerEl, ctx }: SettingsSection): void {
+	new Setting(containerEl)
+		.setName('NanoID alphabet')
+		.setDesc('Characters used for ID generation. Must have at least 2 unique characters.')
+		.addTextArea(text => text
+			.setValue(ctx.settings.nanoidAlphabet)
+			.onChange(async (value) => {
+				// One repeated character generates the same id every time; two is the floor.
+				if (new Set(value).size < 2) return;
+				ctx.settings.nanoidAlphabet = value;
+				await ctx.saveSettings();
+			}));
+}
+
+function renderRemoveGroupButton({ containerEl, ctx, refresh }: SettingsSection, index: number): void {
+	new Setting(containerEl)
 		.setName(`Separator Group ${index + 1}`)
 		.setHeading()
 		.addButton(button => button
@@ -30,59 +60,48 @@ function renderSeparatorGroup(section: SettingsSection, index: number): void {
 				await ctx.saveSettings();
 				refresh();
 			}));
+}
 
-	new Setting(groupContainer)
+function renderSeparatorChar({ containerEl, ctx }: SettingsSection, index: number): void {
+	new Setting(containerEl)
 		.setName('Inject character')
 		.setDesc('Single character to inject (e.g., "-").')
 		.addText(text => text
-			.setValue(separator.char)
+			.setValue(ctx.settings.nanoidSeparators[index].char)
 			.onChange(async (value) => {
 				ctx.settings.nanoidSeparators[index].char = value.slice(0, 1);
 				await ctx.saveSettings();
 			}));
+}
 
-	new Setting(groupContainer)
+function renderSeparatorPosition({ containerEl, ctx }: SettingsSection, index: number): void {
+	new Setting(containerEl)
 		.setName('Injection position')
 		.setDesc('Index to inject the character. Negative numbers count from the end.')
 		.addText(text => text
-			.setValue(String(separator.position))
+			.setValue(String(ctx.settings.nanoidSeparators[index].position))
 			.onChange(async (value) => {
-				const num = parseInt(value);
-				if (!isNaN(num)) {
-					ctx.settings.nanoidSeparators[index].position = num;
-					await ctx.saveSettings();
-				}
+				const position = parseInteger(value);
+				if (position === undefined) return;
+				ctx.settings.nanoidSeparators[index].position = position;
+				await ctx.saveSettings();
 			}));
 }
 
-/** The NanoID controls, drawn only when NanoID is the selected algorithm. */
-export function renderNanoidOptions(section: SettingsSection): void {
+/** One separator group's controls, drawn together in their own container. */
+function renderSeparatorGroup(section: SettingsSection, index: number): void {
+	const group: SettingsSection = {
+		...section,
+		containerEl: section.containerEl.createEl('div', { cls: 'uid-separator-group-container' }),
+	};
+
+	renderRemoveGroupButton(group, index);
+	renderSeparatorChar(group, index);
+	renderSeparatorPosition(group, index);
+}
+
+function renderSeparators(section: SettingsSection): void {
 	const { containerEl, ctx, refresh } = section;
-
-	new Setting(containerEl)
-		.setName('NanoID length')
-		.setDesc(`Length of the generated ID (excluding separators). Min ${NANOID_MIN_LENGTH}, max ${NANOID_MAX_LENGTH}.`)
-		.addText(text => text
-			.setValue(String(ctx.settings.nanoidLength))
-			.onChange(async (value) => {
-				const num = parseInt(value);
-				if (!isNaN(num) && num >= NANOID_MIN_LENGTH && num <= NANOID_MAX_LENGTH) {
-					ctx.settings.nanoidLength = num;
-					await ctx.saveSettings();
-				}
-			}));
-
-	new Setting(containerEl)
-		.setName('NanoID alphabet')
-		.setDesc('Characters used for ID generation. Must have at least 2 unique characters.')
-		.addTextArea(text => text
-			.setValue(ctx.settings.nanoidAlphabet)
-			.onChange(async (value) => {
-				if (new Set(value).size >= 2) {
-					ctx.settings.nanoidAlphabet = value;
-					await ctx.saveSettings();
-				}
-			}));
 
 	containerEl.createEl('h3', { text: 'NanoID Separator Groups' });
 	containerEl.createEl('p', { text: 'Define characters to inject into the NanoID at specific positions. Position is calculated from the raw Base ID.' })
@@ -101,4 +120,11 @@ export function renderNanoidOptions(section: SettingsSection): void {
 				await ctx.saveSettings();
 				refresh();
 			}));
+}
+
+/** The NanoID controls, drawn only when NanoID is the selected algorithm. */
+export function renderNanoidOptions(section: SettingsSection): void {
+	renderLength(section);
+	renderAlphabet(section);
+	renderSeparators(section);
 }

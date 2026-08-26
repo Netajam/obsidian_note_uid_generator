@@ -113,7 +113,7 @@ Access the plugin settings from Obsidian Settings -> Community Plugins -> UID Ge
 *   **Auto-Assign IDs to New Notes in Inbox:** Enable Automatic Generation, set Scope to 'Specific Folder(s)', click "Manage folders" and add `Inbox` (and any other target folders).
 *   **Clean Up Old IDs:** Set 'Folder to clear UIDs from' to `Archives/Old Project`, click 'Clear UIDs Now', confirm.
 *   **Get List of Project Notes with IDs:** Right-click the `Projects/Current Project` folder, select `Copy titles+uids from "Current Project"`.
-*   **Clean Up After Copying Notes:** Settings -> Duplicate uids -> 'Scan now'. Pick which note keeps each shared uid, or click 'Keep the oldest in each'.
+*   **Clean Up After Copying Notes:** Click the magnifier in the ribbon (or run `Scan for duplicate uids`). For each group, either 'Keep this one' on the original or 'New uid for this one' on the copy — or 'Keep the oldest in each' to resolve every group at once.
 
 ## Development
 
@@ -139,7 +139,8 @@ The code splits in two: `src/uid` is the domain (what a uid is and what can be d
 *   `src/plugin/commands/`: Command, ribbon and context-menu handlers, registered by `commands/register.ts`.
 *   `src/plugin/settings/`: `SettingsTab.ts` plus one folder per settings feature — `generator/`, `autoGeneration/`, `clearing/` — each owning the widgets and vault pass it uses.
 *   `src/plugin/duplicates/`: The duplicate scan, its report modal and its settings section. It sits beside `commands/` and `settings/` because it is both, and `plugin/register.ts` wires it into each.
-*   `src/uid/`: `context.ts` (what the domain needs from its host), `settings.ts` (the persisted shape, defaults and migration), `noteUid.ts` (read/ensure/renew/clear one note's uid), `bulk.ts` (vault-wide passes), `duplicates.ts` (notes sharing a uid), `scope.ts`, `folderNotes.ts`.
+*   `src/settings.ts`: The persisted settings shape, its defaults, and the migration of whatever an older version wrote.
+*   `src/uid/`: `context.ts` (what the domain needs from its host), `noteUid.ts` (read/ensure/renew/clear one note's uid), `bulk.ts` (vault-wide passes), `duplicates.ts` (notes sharing a uid), `scope.ts`, `folderNotes.ts`.
 *   `src/uid/generators/`: `generate.ts` (unique ids, retrying past collisions) over the UUID, NanoID, ULID and Snowflake modules.
 *   `src/uid/storage/`: Frontmatter read/write, the `UidIndex` of which notes carry which uid, and the vault sync that keeps it current.
 *   `src/plugin/obsidian.d.ts`: TypeScript declarations for undocumented Obsidian APIs used (like `files-menu`).

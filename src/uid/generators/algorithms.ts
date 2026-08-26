@@ -1,7 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import { ulid } from 'ulid';
-import type { UIDGeneratorSettings } from '../../settings';
-import { generateNanoID } from './nanoid';
+import { generateNanoID, type NanoidSeparator } from './nanoid';
 import { generateSnowflakeID } from './snowflake';
 import { detectNodeId, resolveAutoDetectedNodeId } from './nodeId';
 
@@ -14,8 +13,26 @@ import { detectNodeId, resolveAutoDetectedNodeId } from './nodeId';
  * above it, the only question asked is "an id for these settings, please".
  */
 
+/**
+ * What running an algorithm needs, spelled out here rather than borrowed from
+ * the persisted settings contract.
+ *
+ * Six of the seventeen stored fields matter to an id; naming those six is what
+ * keeps this folder out of `src/settings.ts` entirely. `UIDGeneratorSettings`
+ * satisfies it structurally, so callers still pass `ctx.settings` and the
+ * compiler still objects the day a field here drifts from the one on disk.
+ */
+export interface AlgorithmOptions {
+	uidGenerator: 'uuid' | 'nanoid' | 'ulid' | 'snowflake';
+	nanoidLength: number;
+	nanoidAlphabet: string;
+	nanoidSeparators: NanoidSeparator[];
+	snowflakeNodeId: number;
+	snowflakeNodeIdOverride: number | null;
+}
+
 /** Runs the configured algorithm once. Collision checking is the caller's job. */
-export function generateRawUID(settings: UIDGeneratorSettings): string {
+export function generateRawUID(settings: AlgorithmOptions): string {
 	const { uidGenerator } = settings;
 
 	if (uidGenerator === 'snowflake') {

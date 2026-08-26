@@ -1,6 +1,23 @@
-import { Notice, TAbstractFile, TFile } from 'obsidian';
-import type { UidStore } from '../context';
+import { App, Notice, TAbstractFile, TFile } from 'obsidian';
 import { isMarkdownNote } from './note';
+
+/**
+ * What reading and writing a note's uid needs: the vault, the configured key,
+ * and the index to keep in step.
+ *
+ * Named here rather than taken from `UidContext` so this folder depends on the
+ * uid *key* and not on every setting sitting beside it — and so a test can
+ * drive it with four fields instead of seventeen. `UidStore` satisfies it
+ * structurally, so callers still hand over the whole context.
+ */
+export interface UidRecordStore {
+	app: App;
+	settings: { uidKey: string };
+	/** Every uid currently present in the vault — used for collision detection. */
+	uidCache: Set<string>;
+	/** File path → uid, so deletions can evict from `uidCache` without metadata. */
+	uidPathMap: Map<string, string>;
+}
 
 const ERROR_NOTICE_MS = 5000;
 
@@ -16,7 +33,7 @@ const ALTERNATE_UID_KEYS = ['uid', 'Uid', 'UID'];
  *
  * Returns null if the file has no frontmatter, no uid, or could not be read.
  */
-export function getUIDFromFile(ctx: UidStore, file: TAbstractFile | null): string | null {
+export function getUIDFromFile(ctx: UidRecordStore, file: TAbstractFile | null): string | null {
 	if (!isMarkdownNote(file)) return null;
 	try {
 		const frontmatter = ctx.app.metadataCache.getFileCache(file)?.frontmatter;
@@ -65,7 +82,7 @@ function applyUid(frontmatter: Record<string, unknown>, key: string, uid: string
  * @param overwrite If true, replaces an existing UID. If false, only sets a missing one.
  * @returns True if the UID was written, false if it was left untouched or the write failed.
  */
-export async function setUID(ctx: UidStore, file: TFile, uid: string, overwrite = false): Promise<boolean> {
+export async function setUID(ctx: UidRecordStore, file: TFile, uid: string, overwrite = false): Promise<boolean> {
 	if (!isMarkdownNote(file)) {
 		return false;
 	}
@@ -98,7 +115,7 @@ export async function setUID(ctx: UidStore, file: TFile, uid: string, overwrite 
  * Removes the UID property from a file's frontmatter, respecting the custom key.
  * @returns True if a UID was found and removed, false otherwise.
  */
-export async function removeUID(ctx: UidStore, file: TFile): Promise<boolean> {
+export async function removeUID(ctx: UidRecordStore, file: TFile): Promise<boolean> {
 	if (!file || !(file instanceof TFile)) return false;
 
 	const key = ctx.settings.uidKey;

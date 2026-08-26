@@ -1,17 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { TFile } from 'obsidian';
 
-import {
-	generateUID,
-	formatCopyString,
-	getUIDFromFile,
-	setUID,
-	removeUID,
-	_resetSnowflakeState,
-	detectNodeId,
-	resolveAutoDetectedNodeId,
-} from './uidUtils';
-import type UIDGenerator from './main';
+import { generateUID } from './generators/generate';
+import { getUIDFromFile, removeUID, setUID } from './storage/frontmatter';
+import { detectNodeId, resolveAutoDetectedNodeId } from './generators/nodeId';
+import { _resetSnowflakeState } from './generators/snowflake';
+import type { UidContext } from './context';
+import { UidIndex } from './storage/uidIndex';
 
 type Settings = {
 	uidKey: string;
@@ -25,8 +20,8 @@ type Settings = {
 
 function makePlugin(
 	overrides: Partial<Settings> = {},
-	cache: Set<string> = new Set(),
-): UIDGenerator {
+	uidIndex: UidIndex = new UidIndex(),
+): UidContext {
 	const settings: Settings = {
 		uidKey: 'uid',
 		uidGenerator: 'uuid',
@@ -35,7 +30,7 @@ function makePlugin(
 		nanoidSeparators: [],
 		...overrides,
 	};
-	return { settings, uidCache: cache } as unknown as UIDGenerator;
+	return { settings, uidIndex } as unknown as UidContext;
 }
 
 type Frontmatter = Record<string, unknown>;
@@ -48,10 +43,9 @@ function makeFile(path: string, extension = 'md'): TFile {
 }
 
 interface PluginHarness {
-	plugin: UIDGenerator;
+	plugin: UidContext;
 	frontmatter: Frontmatter;
-	uidCache: Set<string>;
-	uidPathMap: Map<string, string>;
+	uidIndex: UidIndex;
 	processFrontMatter: ReturnType<typeof vi.fn>;
 }
 
@@ -65,8 +59,7 @@ function makePluginWithApp(opts: {
 	) => Promise<void>;
 } = {}): PluginHarness {
 	const fm: Frontmatter = opts.frontmatter ?? {};
-	const uidCache = new Set<string>();
-	const uidPathMap = new Map<string, string>();
+	const uidIndex = new UidIndex();
 
 	const defaultProcess = async (
 		_file: TFile,
@@ -84,8 +77,7 @@ function makePluginWithApp(opts: {
 			nanoidAlphabet: 'abc',
 			nanoidSeparators: [],
 		},
-		uidCache,
-		uidPathMap,
+		uidIndex,
 		app: {
 			metadataCache: {
 				getFileCache: opts.getFileCache ?? (() => ({ frontmatter: fm })),
@@ -94,56 +86,11 @@ function makePluginWithApp(opts: {
 				processFrontMatter,
 			},
 		},
-	} as unknown as UIDGenerator;
+	} as unknown as UidContext;
 
-	return { plugin, frontmatter: fm, uidCache, uidPathMap, processFrontMatter };
+	return { plugin, frontmatter: fm, uidIndex, processFrontMatter };
 }
 
-describe('formatCopyString', () => {
-	it('substitutes title, uid, and uidKey', () => {
-		const plugin = makePlugin({ uidKey: 'note-id' });
-		expect(
-			formatCopyString(plugin, '{title} - {uidKey}: {uid}', 'My Note', 'abc123'),
-		).toBe('My Note - note-id: abc123');
-	});
-
-	it('replaces missing uid with empty string', () => {
-		const plugin = makePlugin();
-		expect(formatCopyString(plugin, '{title} {uid}', 'Hello', null)).toBe('Hello ');
-		expect(formatCopyString(plugin, '{title} {uid}', 'Hello', undefined)).toBe('Hello ');
-	});
-
-	it('replaces missing title with empty string', () => {
-		const plugin = makePlugin();
-		expect(formatCopyString(plugin, '{title}-{uid}', '', 'x')).toBe('-x');
-	});
-
-	it('replaces every occurrence of a placeholder', () => {
-		const plugin = makePlugin();
-		expect(formatCopyString(plugin, '{uid}/{uid}', '', 'abc')).toBe('abc/abc');
-	});
-
-	it('returns the format string unchanged when no placeholders are present', () => {
-		const plugin = makePlugin();
-		expect(formatCopyString(plugin, 'no placeholders here', 't', 'u')).toBe(
-			'no placeholders here',
-		);
-	});
-
-	it('returns an empty string when the format string is empty', () => {
-		const plugin = makePlugin();
-		expect(formatCopyString(plugin, '', 'title', 'uid')).toBe('');
-	});
-
-	it('substitutes a {uid} literal inside the title (placeholders are processed in order)', () => {
-		// {title} is replaced before {uid}, so a literal "{uid}" in the title
-		// will itself be replaced on the next pass. Documenting current behavior.
-		const plugin = makePlugin();
-		expect(formatCopyString(plugin, '{title}', 'has {uid} inside', 'X')).toBe(
-			'has X inside',
-		);
-	});
-});
 
 describe('generateUID — generator selection', () => {
 	it('returns a valid UUID v4 by default', () => {
@@ -263,23 +210,35 @@ describe('generateUID — NanoID separator injection', () => {
 
 describe('generateUID — collision handling', () => {
 	it('returns the duplicate after exhausting retries when no unique id is possible', () => {
-		const cache = new Set<string>(['a']);
+		const uidIndex = new UidIndex();
+		uidIndex.set('taken.md', 'a');
 		const plugin = makePlugin(
 			{ uidGenerator: 'nanoid', nanoidAlphabet: 'a', nanoidLength: 1 },
-			cache,
+			uidIndex,
 		);
 		expect(generateUID(plugin)).toBe('a');
 	});
 
-	it('returns a non-cached id when one is available', () => {
-		const cache = new Set<string>(); // empty cache, no collisions possible
+	it('returns an unindexed id when one is available', () => {
+		const uidIndex = new UidIndex(); // nothing indexed, no collisions possible
 		const plugin = makePlugin(
 			{ uidGenerator: 'nanoid', nanoidAlphabet: 'ab', nanoidLength: 8 },
-			cache,
+			uidIndex,
 		);
 		const id = generateUID(plugin);
 		expect(id).toMatch(/^[ab]{8}$/);
-		expect(cache.has(id)).toBe(false);
+		expect(uidIndex.has(id)).toBe(false);
+	});
+
+	it('retries past a uid two notes already share', () => {
+		const uidIndex = new UidIndex();
+		uidIndex.set('original.md', 'aa');
+		uidIndex.set('copy.md', 'aa');
+		const plugin = makePlugin(
+			{ uidGenerator: 'nanoid', nanoidAlphabet: 'ab', nanoidLength: 2 },
+			uidIndex,
+		);
+		expect(generateUID(plugin)).not.toBe('aa');
 	});
 });
 
@@ -424,45 +383,44 @@ describe('setUID', () => {
 		warnSpy.mockRestore();
 	});
 
-	it('sets the UID and updates caches when the key is missing', async () => {
-		const { plugin, frontmatter, uidCache, uidPathMap } = makePluginWithApp({
+	it('sets the UID and indexes it when the key is missing', async () => {
+		const { plugin, frontmatter, uidIndex } = makePluginWithApp({
 			frontmatter: {},
 		});
 		const file = makeFile('note.md');
 		expect(await setUID(plugin, file, 'new-uid')).toBe(true);
 		expect(frontmatter.uid).toBe('new-uid');
-		expect(uidCache.has('new-uid')).toBe(true);
-		expect(uidPathMap.get('note.md')).toBe('new-uid');
+		expect(uidIndex.owners('new-uid')).toEqual(['note.md']);
 	});
 
 	it('does not overwrite an existing UID when overwrite=false', async () => {
-		const { plugin, frontmatter, uidCache, uidPathMap } = makePluginWithApp({
+		const { plugin, frontmatter, uidIndex } = makePluginWithApp({
 			frontmatter: { uid: 'existing' },
 		});
 		const file = makeFile('note.md');
 		expect(await setUID(plugin, file, 'new-uid')).toBe(false);
 		expect(frontmatter.uid).toBe('existing');
-		expect(uidCache.has('new-uid')).toBe(false);
-		expect(uidPathMap.has('note.md')).toBe(false);
+		expect(uidIndex.has('new-uid')).toBe(false);
+		expect(uidIndex.uidAt('note.md')).toBeNull();
 	});
 
 	it('overwrites an existing UID when overwrite=true and the value differs', async () => {
-		const { plugin, frontmatter, uidCache } = makePluginWithApp({
+		const { plugin, frontmatter, uidIndex } = makePluginWithApp({
 			frontmatter: { uid: 'old' },
 		});
 		const file = makeFile('note.md');
 		expect(await setUID(plugin, file, 'new', true)).toBe(true);
 		expect(frontmatter.uid).toBe('new');
-		expect(uidCache.has('new')).toBe(true);
+		expect(uidIndex.has('new')).toBe(true);
 	});
 
 	it('reports no change when overwrite=true but the value is identical', async () => {
-		const { plugin, uidCache } = makePluginWithApp({
+		const { plugin, uidIndex } = makePluginWithApp({
 			frontmatter: { uid: 'same' },
 		});
 		const file = makeFile('note.md');
 		expect(await setUID(plugin, file, 'same', true)).toBe(false);
-		expect(uidCache.has('same')).toBe(false);
+		expect(uidIndex.has('same')).toBe(false);
 	});
 
 	it('removes legacy uid/Uid/UID keys when a custom key is configured', async () => {
@@ -491,12 +449,12 @@ describe('setUID', () => {
 	});
 
 	it('treats an existing empty-string UID as missing and writes the new value', async () => {
-		const { plugin, frontmatter, uidCache } = makePluginWithApp({
+		const { plugin, frontmatter, uidIndex } = makePluginWithApp({
 			frontmatter: { uid: '' },
 		});
 		expect(await setUID(plugin, makeFile('note.md'), 'fresh')).toBe(true);
 		expect(frontmatter.uid).toBe('fresh');
-		expect(uidCache.has('fresh')).toBe(true);
+		expect(uidIndex.has('fresh')).toBe(true);
 	});
 
 	it('treats an existing null UID as missing and writes the new value', async () => {
@@ -552,17 +510,27 @@ describe('removeUID', () => {
 		expect(frontmatter.other).toBe('thing');
 	});
 
-	it('removes the UID and updates caches when present', async () => {
-		const { plugin, frontmatter, uidCache, uidPathMap } = makePluginWithApp({
+	it('removes the UID and evicts it from the index when present', async () => {
+		const { plugin, frontmatter, uidIndex } = makePluginWithApp({
 			frontmatter: { uid: 'gone' },
 		});
-		uidCache.add('gone');
-		uidPathMap.set('note.md', 'gone');
+		uidIndex.set('note.md', 'gone');
 
 		expect(await removeUID(plugin, makeFile('note.md'))).toBe(true);
 		expect(frontmatter.uid).toBeUndefined();
-		expect(uidCache.has('gone')).toBe(false);
-		expect(uidPathMap.has('note.md')).toBe(false);
+		expect(uidIndex.has('gone')).toBe(false);
+		expect(uidIndex.uidAt('note.md')).toBeNull();
+	});
+
+	it('leaves a removed uid indexed while another note still carries it', async () => {
+		const { plugin, uidIndex } = makePluginWithApp({
+			frontmatter: { uid: 'shared' },
+		});
+		uidIndex.set('note.md', 'shared');
+		uidIndex.set('twin.md', 'shared');
+
+		expect(await removeUID(plugin, makeFile('note.md'))).toBe(true);
+		expect(uidIndex.owners('shared')).toEqual(['twin.md']);
 	});
 
 	it('returns false and logs when processFrontMatter rejects', async () => {
@@ -587,17 +555,16 @@ describe('removeUID', () => {
 		expect(frontmatter.uid).toBe('untouched');
 	});
 
-	it('removes a falsy numeric UID and cleans up the cache via its string form', async () => {
-		const { plugin, frontmatter, uidCache, uidPathMap } = makePluginWithApp({
+	it('removes a falsy numeric UID and evicts it from the index', async () => {
+		const { plugin, frontmatter, uidIndex } = makePluginWithApp({
 			frontmatter: { uid: 0 },
 		});
-		uidCache.add('0');
-		uidPathMap.set('note.md', '0');
+		uidIndex.set('note.md', '0');
 
 		expect(await removeUID(plugin, makeFile('note.md'))).toBe(true);
 		expect(frontmatter.uid).toBeUndefined();
-		expect(uidCache.has('0')).toBe(false);
-		expect(uidPathMap.has('note.md')).toBe(false);
+		expect(uidIndex.has('0')).toBe(false);
+		expect(uidIndex.uidAt('note.md')).toBeNull();
 	});
 });
 
@@ -606,7 +573,7 @@ describe('Snowflake ID generator', () => {
 		_resetSnowflakeState();
 	});
 
-	function snowflakePlugin(nodeId: number): UIDGenerator {
+	function snowflakePlugin(nodeId: number): UidContext {
 		return makePlugin({ uidGenerator: 'snowflake', snowflakeNodeId: nodeId });
 	}
 

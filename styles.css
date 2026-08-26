@@ -61,3 +61,54 @@
     text-align: center;
     color: var(--text-muted);
 }
+/* Duplicate uid report modal */
+.uid-duplicate-report .uid-duplicate-groups {
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.uid-duplicate-report .uid-duplicate-group {
+    border: 1px solid var(--background-modifier-border);
+    border-radius: var(--radius-m);
+    margin-bottom: 10px;
+    padding: 5px 8px;
+}
+
+.uid-duplicate-report .uid-duplicate-uid {
+    font-family: var(--font-monospace);
+    font-size: var(--font-ui-small);
+    color: var(--text-accent);
+    padding: 4px 0;
+    word-break: break-all;
+}
+
+.uid-duplicate-report .setting-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 5px 0;
+    border-top: 1px solid var(--background-modifier-border);
+}
+
+.uid-duplicate-report .setting-item-info {
+    flex-grow: 1;
+    margin-right: 10px;
+    overflow: hidden;
+}
+
+.uid-duplicate-report .setting-item-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.uid-duplicate-report .setting-item-control {
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+.uid-duplicate-report .setting-item-control button {
+    flex-shrink: 0;
+    white-space: nowrap;
+}

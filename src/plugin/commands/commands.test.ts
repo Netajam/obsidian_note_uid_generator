@@ -1,19 +1,17 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { TFolder } from 'obsidian';
+import { handleAutoGenerateUid } from './autoGenerate';
 import {
-	handleAutoGenerateUid,
-	handleAddMissingUidsInScope,
-	handleClearUIDsInFolder,
 	handleCopyTitleUid,
-	handleGenerateUpdateUid,
-	handleCreateUidIfMissing,
-	handleRemoveUid,
-	handleCopyUid,
-	handleCopyTitlesAndUidsFromFolder,
 	handleCopyTitlesAndUidsForMultipleFiles,
-} from './commands';
-import { makeFakeApp, installFakeClipboard } from '../tests/fakes/app';
-import type { UIDGeneratorSettings } from './settings';
+	handleCopyTitlesAndUidsFromFolder,
+	handleCopyUid,
+} from './copy';
+import { handleCreateUidIfMissing, handleGenerateUpdateUid, handleRemoveUid } from './noteUid';
+import { activeNote } from './target';
+import { addMissingUidsInScope, clearUIDsInFolder } from '../../uid/bulk';
+import { installFakeClipboard, makeFakeApp } from '../../../tests/fakes/app';
+import type { UIDGeneratorSettings } from '../../settings';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -162,7 +160,7 @@ describe('handleAutoGenerateUid — settings-driven decisions', () => {
 			const after = app.frontmatterByPath.get(c.filePath) ?? {};
 			if (c.shouldGenerate) {
 				expect(after.uid).toMatch(UUID_RE);
-				expect(app.plugin.uidCache.has(after.uid as string)).toBe(true);
+				expect(app.uidIndex.has(after.uid as string)).toBe(true);
 			} else if (c.existingUid) {
 				expect(after.uid).toBe(c.existingUid);
 			} else {
@@ -266,8 +264,8 @@ describe('handleAutoGenerateUid — exclusion list edge cases', () => {
 		expect(await runOn('Notes/b.md', ['', 'Drafts', '   '])).toMatch(UUID_RE);
 	});
 
-	it('"/" excludes every file (consistent with handleClearUIDsInFolder)', async () => {
-		// EXPECTED behavior — currently fails. handleClearUIDsInFolder treats "/"
+	it('"/" excludes every file (consistent with clearUIDsInFolder)', async () => {
+		// EXPECTED behavior — currently fails. clearUIDsInFolder treats "/"
 		// as "the whole vault"; the exclusion matcher should follow the same
 		// convention so users get consistent semantics across settings.
 		// Fix lives in commands.ts: special-case normEx === '/' to match every path.
@@ -331,7 +329,7 @@ describe('settings that effectively exclude every file', () => {
 		}
 	});
 
-	it('bulk: handleAddMissingUidsInScope completes cleanly when every file is out of scope', async () => {
+	it('bulk: addMissingUidsInScope completes cleanly when every file is out of scope', async () => {
 		const app = makeFakeApp({
 			files: [
 				{ path: 'a.md' },
@@ -344,7 +342,7 @@ describe('settings that effectively exclude every file', () => {
 			},
 		});
 
-		await expect(handleAddMissingUidsInScope(app.plugin)).resolves.toBeUndefined();
+		await expect(addMissingUidsInScope(app.plugin)).resolves.toBeUndefined();
 
 		for (const path of ['a.md', 'Notes/b.md', 'Notes/sub/c.md']) {
 			expect(app.frontmatterByPath.get(path)?.uid).toBeUndefined();
@@ -352,7 +350,7 @@ describe('settings that effectively exclude every file', () => {
 		expect(app.processFrontMatter).not.toHaveBeenCalled();
 	});
 
-	it('bulk: handleAddMissingUidsInScope completes cleanly when every file is excluded', async () => {
+	it('bulk: addMissingUidsInScope completes cleanly when every file is excluded', async () => {
 		const app = makeFakeApp({
 			files: [
 				{ path: 'Drafts/a.md' },
@@ -365,7 +363,7 @@ describe('settings that effectively exclude every file', () => {
 			},
 		});
 
-		await expect(handleAddMissingUidsInScope(app.plugin)).resolves.toBeUndefined();
+		await expect(addMissingUidsInScope(app.plugin)).resolves.toBeUndefined();
 
 		for (const path of ['Drafts/a.md', 'Templates/b.md', 'Templates/sub/c.md']) {
 			expect(app.frontmatterByPath.get(path)?.uid).toBeUndefined();
@@ -374,7 +372,7 @@ describe('settings that effectively exclude every file', () => {
 	});
 });
 
-describe('parity — handleAutoGenerateUid vs handleAddMissingUidsInScope', () => {
+describe('parity — handleAutoGenerateUid vs addMissingUidsInScope', () => {
 	// Both functions implement the same "should this file be skipped?" decision.
 	// One operates per-file (event-driven), the other in bulk. If the two ever
 	// drift, users would see inconsistent behavior between auto-gen on file
@@ -442,7 +440,7 @@ describe('parity — handleAutoGenerateUid vs handleAddMissingUidsInScope', () =
 			files: s.files.map((path) => ({ path })),
 			settings: s.settings,
 		});
-		await handleAddMissingUidsInScope(app.plugin);
+		await addMissingUidsInScope(app.plugin);
 		return collectUidPaths(app);
 	}
 
@@ -466,7 +464,7 @@ describe('parity — handleAutoGenerateUid vs handleAddMissingUidsInScope', () =
 	}
 });
 
-describe('handleAddMissingUidsInScope — bulk decision over many files', () => {
+describe('addMissingUidsInScope — bulk decision over many files', () => {
 	it('adds UIDs only to in-scope, non-excluded, uid-less markdown files', async () => {
 		const app = makeFakeApp({
 			files: [
@@ -484,7 +482,7 @@ describe('handleAddMissingUidsInScope — bulk decision over many files', () => 
 			},
 		});
 
-		await handleAddMissingUidsInScope(app.plugin);
+		await addMissingUidsInScope(app.plugin);
 
 		const fm = (path: string) => app.frontmatterByPath.get(path) ?? {};
 		expect(fm('Notes/a.md').uid).toMatch(UUID_RE);
@@ -500,7 +498,7 @@ describe('handleAddMissingUidsInScope — bulk decision over many files', () => 
 			settings: { uidKey: 'note-id', autoGenerationScope: 'vault' },
 		});
 
-		await handleAddMissingUidsInScope(app.plugin);
+		await addMissingUidsInScope(app.plugin);
 
 		const fm = app.frontmatterByPath.get('Notes/a.md') ?? {};
 		expect(fm['note-id']).toMatch(UUID_RE);
@@ -518,7 +516,7 @@ describe('handleAddMissingUidsInScope — bulk decision over many files', () => 
 			},
 		});
 
-		await handleAddMissingUidsInScope(app.plugin);
+		await addMissingUidsInScope(app.plugin);
 
 		for (const path of ['a.md', 'b.md']) {
 			const fm = app.frontmatterByPath.get(path) ?? {};
@@ -527,7 +525,7 @@ describe('handleAddMissingUidsInScope — bulk decision over many files', () => 
 	});
 });
 
-describe('handleClearUIDsInFolder — folder scoping', () => {
+describe('clearUIDsInFolder — folder scoping', () => {
 	it('removes uids only from files inside the target folder', async () => {
 		const app = makeFakeApp({
 			files: [
@@ -537,7 +535,7 @@ describe('handleClearUIDsInFolder — folder scoping', () => {
 			],
 		});
 
-		await handleClearUIDsInFolder(app.plugin, 'Notes');
+		await clearUIDsInFolder(app.plugin, 'Notes');
 
 		expect(app.frontmatterByPath.get('Notes/a.md')?.uid).toBeUndefined();
 		expect(app.frontmatterByPath.get('Notes/sub/b.md')?.uid).toBeUndefined();
@@ -552,7 +550,7 @@ describe('handleClearUIDsInFolder — folder scoping', () => {
 			],
 		});
 
-		await handleClearUIDsInFolder(app.plugin, '/');
+		await clearUIDsInFolder(app.plugin, '/');
 
 		expect(app.frontmatterByPath.get('a.md')?.uid).toBeUndefined();
 		expect(app.frontmatterByPath.get('sub/b.md')?.uid).toBeUndefined();
@@ -563,7 +561,7 @@ describe('handleClearUIDsInFolder — folder scoping', () => {
 			files: [{ path: 'Notes/a.md', frontmatter: { uid: 'keep' } }],
 		});
 
-		await handleClearUIDsInFolder(app.plugin, 'NonExistent');
+		await clearUIDsInFolder(app.plugin, 'NonExistent');
 
 		expect(app.frontmatterByPath.get('Notes/a.md')?.uid).toBe('keep');
 		expect(app.processFrontMatter).not.toHaveBeenCalled();
@@ -575,7 +573,7 @@ describe('handleClearUIDsInFolder — folder scoping', () => {
 			settings: { uidKey: 'note-id' },
 		});
 
-		await handleClearUIDsInFolder(app.plugin, 'Notes');
+		await clearUIDsInFolder(app.plugin, 'Notes');
 
 		const fm = app.frontmatterByPath.get('Notes/a.md') ?? {};
 		expect(fm['note-id']).toBeUndefined();
@@ -642,7 +640,7 @@ describe('handleGenerateUpdateUid — overwrites the active file uid', () => {
 		});
 		app.setActiveFile(app.files[0]);
 
-		await handleGenerateUpdateUid(app.plugin, true);
+		await handleGenerateUpdateUid(app.plugin, activeNote(app.plugin.app));
 
 		const fm = app.frontmatterByPath.get('note.md') ?? {};
 		expect(fm.uid).toMatch(UUID_RE);
@@ -653,7 +651,7 @@ describe('handleGenerateUpdateUid — overwrites the active file uid', () => {
 		const app = makeFakeApp({ files: [{ path: 'note.md' }] });
 		app.setActiveFile(app.files[0]);
 
-		await handleGenerateUpdateUid(app.plugin, true);
+		await handleGenerateUpdateUid(app.plugin, activeNote(app.plugin.app));
 
 		expect(app.frontmatterByPath.get('note.md')?.uid).toMatch(UUID_RE);
 	});
@@ -662,7 +660,7 @@ describe('handleGenerateUpdateUid — overwrites the active file uid', () => {
 		const app = makeFakeApp({ files: [{ path: 'note.md' }] });
 		// active file deliberately not set
 
-		await handleGenerateUpdateUid(app.plugin, true);
+		await handleGenerateUpdateUid(app.plugin, activeNote(app.plugin.app));
 
 		expect(app.processFrontMatter).not.toHaveBeenCalled();
 		expect(app.frontmatterByPath.get('note.md')?.uid).toBeUndefined();
@@ -674,7 +672,7 @@ describe('handleCreateUidIfMissing — only sets when absent', () => {
 		const app = makeFakeApp({ files: [{ path: 'note.md' }] });
 		app.setActiveFile(app.files[0]);
 
-		await handleCreateUidIfMissing(app.plugin);
+		await handleCreateUidIfMissing(app.plugin, activeNote(app.plugin.app));
 
 		expect(app.frontmatterByPath.get('note.md')?.uid).toMatch(UUID_RE);
 	});
@@ -685,7 +683,7 @@ describe('handleCreateUidIfMissing — only sets when absent', () => {
 		});
 		app.setActiveFile(app.files[0]);
 
-		await handleCreateUidIfMissing(app.plugin);
+		await handleCreateUidIfMissing(app.plugin, activeNote(app.plugin.app));
 
 		expect(app.frontmatterByPath.get('note.md')?.uid).toBe('keep-me');
 		// Short-circuits before processFrontMatter is invoked.
@@ -700,7 +698,7 @@ describe('handleRemoveUid', () => {
 		});
 		app.setActiveFile(app.files[0]);
 
-		await handleRemoveUid(app.plugin);
+		await handleRemoveUid(app.plugin, activeNote(app.plugin.app));
 
 		expect(app.frontmatterByPath.get('note.md')?.uid).toBeUndefined();
 	});
@@ -709,7 +707,7 @@ describe('handleRemoveUid', () => {
 		const app = makeFakeApp({ files: [{ path: 'note.md' }] });
 		app.setActiveFile(app.files[0]);
 
-		await handleRemoveUid(app.plugin);
+		await handleRemoveUid(app.plugin, activeNote(app.plugin.app));
 
 		// removeUID is called but finds nothing to delete; frontmatter stays empty.
 		expect(app.frontmatterByPath.get('note.md')?.uid).toBeUndefined();
@@ -727,7 +725,7 @@ describe('handleRemoveUid', () => {
 		});
 		app.setActiveFile(app.files[0]);
 
-		await handleRemoveUid(app.plugin);
+		await handleRemoveUid(app.plugin, activeNote(app.plugin.app));
 
 		const fm = app.frontmatterByPath.get('note.md') ?? {};
 		expect(fm['note-id']).toBeUndefined();
@@ -752,7 +750,7 @@ describe('handleCopyUid — copies the raw uid (no formatting)', () => {
 		});
 		app.setActiveFile(app.files[0]);
 
-		handleCopyUid(app.plugin);
+		handleCopyUid(app.plugin, activeNote(app.plugin.app));
 		await new Promise((r) => setImmediate(r));
 
 		expect(clipboard.writes).toEqual(['just-me']);

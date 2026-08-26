@@ -1,12 +1,14 @@
-import { App, PluginSettingTab, Setting, normalizePath, Notice } from 'obsidian';
-import UIDGenerator from './main';
-import { FolderSuggest } from './ui/FolderSuggest';
-import { ConfirmationModal } from './ui/ConfirmationModal';
-import { FolderExclusionModal } from './ui/FolderExclusionModal';
-import { FolderSelectionModal } from './ui/FolderSelectionModal';
-import { detectNodeId, resolveAutoDetectedNodeId } from './uidUtils';
+import { normalizePath } from 'obsidian';
 
-// --- Settings Interface ---
+/**
+ * The persisted settings contract: the shape stored on disk, the values a
+ * fresh install starts from, and how whatever an older version wrote becomes
+ * current, well-formed settings.
+ *
+ * Migration lives here rather than beside the loader because it is defined
+ * entirely by this shape — every rule below is "field X used to be written
+ * like Y".
+ */
 export interface UIDGeneratorSettings {
 	uidKey: string;
 	autoGenerateUid: boolean;
@@ -21,12 +23,13 @@ export interface UIDGeneratorSettings {
 	autoGenerationFolder: string;   // kept for migration from older versions
 	autoGenerationFolders: string[];
 	autoGenerationExclusions: string[];
+	/** What to do when a note turns up carrying a uid another note already has. */
+	duplicateUidCheck: 'off' | 'notify' | 'regenerate';
 	folderToClear: string;
 	copyFormatString: string;
 	copyFormatStringMissingUid: string;
 }
 
-// --- Default Settings ---
 export const DEFAULT_SETTINGS: UIDGeneratorSettings = {
 	uidKey: 'uid',
 	autoGenerateUid: false,
@@ -40,399 +43,84 @@ export const DEFAULT_SETTINGS: UIDGeneratorSettings = {
 	autoGenerationFolder: '',
 	autoGenerationFolders: [],
 	autoGenerationExclusions: [],
+	duplicateUidCheck: 'notify',
 	folderToClear: '',
 	copyFormatString: '{title} - {uidKey}: {uid}',
 	copyFormatStringMissingUid: '{title} - No {uidKey}',
+};
+
+export interface MigratedSettings {
+	settings: UIDGeneratorSettings;
+	/** True when a legacy field was rewritten and the result must be persisted. */
+	needsSave: boolean;
 }
 
-// --- Settings Tab Class ---
-export class UIDSettingTab extends PluginSettingTab {
-	plugin: UIDGenerator;
+/**
+ * A copy of the list, or an empty one when an older version stored something
+ * that is not a list at all.
+ *
+ * The copy is the point: `Object.assign` below shares whichever list instance
+ * it took, so without this a migration that appends a folder would append it
+ * to `DEFAULT_SETTINGS` itself, and every later load would start from the
+ * previous user's data.
+ */
+function toOwnList<T>(value: T[]): T[] {
+	return Array.isArray(value) ? [...value] : [];
+}
 
-	constructor(app: App, plugin: UIDGenerator) {
-		super(app, plugin);
-		this.plugin = plugin;
+/** Fills in defaults and repairs fields an older version may have stored with the wrong type. */
+function normalizeSettings(settings: UIDGeneratorSettings): void {
+	settings.autoGenerationExclusions = toOwnList(settings.autoGenerationExclusions);
+	settings.nanoidSeparators = toOwnList(settings.nanoidSeparators).map(separator => ({ ...separator }));
+	settings.autoGenerationFolders = toOwnList(settings.autoGenerationFolders);
+	settings.copyFormatString = settings.copyFormatString || DEFAULT_SETTINGS.copyFormatString;
+	settings.copyFormatStringMissingUid = settings.copyFormatStringMissingUid || DEFAULT_SETTINGS.copyFormatStringMissingUid;
+}
+
+/**
+ * One-shot migration from the legacy single-folder string to the array.
+ * Clears the old field so subsequent loads no-op without rewriting settings.
+ */
+function migrateAutoGenerationFolder(settings: UIDGeneratorSettings): boolean {
+	if (!settings.autoGenerationFolder || settings.autoGenerationFolder.trim() === '') return false;
+
+	const oldFolder = normalizePath(settings.autoGenerationFolder.trim());
+	if (oldFolder && !settings.autoGenerationFolders.includes(oldFolder)) {
+		settings.autoGenerationFolders.push(oldFolder);
 	}
+	settings.autoGenerationFolder = '';
+	return true;
+}
 
-	// This method re-renders the settings tab content
-	display(): void {
-		const { containerEl } = this;
-		containerEl.empty();
+/**
+ * One-shot migration from the legacy Snowflake auto-detect toggle to the
+ * override field. Earlier PR builds stored a manual Node ID in
+ * `snowflakeNodeId` with `snowflakeAutoDetectNodeId === false`; carry that
+ * intent forward as a custom override so the user's pick survives.
+ */
+function migrateSnowflakeAutoDetect(settings: UIDGeneratorSettings): boolean {
+	if (typeof settings.snowflakeAutoDetectNodeId !== 'boolean') return false;
 
-		// --- General Settings ---
-		new Setting(containerEl)
-			.setName('UID metadata key')
-			.setDesc('The name of the key for the uid in frontmatter (e.g., "uid", "id"). No spaces.')
-			.addText(text => text
-				.setPlaceholder('Default: uid')
-				.setValue(this.plugin.settings.uidKey)
-				.onChange(async (value) => {
-					const cleanedValue = value.trim().replace(/\s+/g, '');
-					const newKey = cleanedValue || DEFAULT_SETTINGS.uidKey;
-					const keyChanged = newKey !== this.plugin.settings.uidKey;
-					this.plugin.settings.uidKey = newKey;
-					if (value !== this.plugin.settings.uidKey) {
-						text.setValue(this.plugin.settings.uidKey);
-					}
-					await this.plugin.saveSettings();
-					if (keyChanged) {
-						this.plugin.buildUidCache();
-					}
-					this.display();
-				}));
-
-		// --- UID Generator Type ---
-		new Setting(containerEl).setName('UID generator type').setHeading();
-
-		new Setting(containerEl)
-			.setName('Generator algorithm')
-			.setDesc('Choose between UUID (standard v4), NanoID (customizable), ULID (sortable, 26 chars), or Snowflake (64-bit, time-sortable, distributed).')
-			.addDropdown(dropdown => dropdown
-				.addOption('uuid', 'UUID')
-				.addOption('nanoid', 'NanoID')
-				.addOption('ulid', 'ULID')
-				.addOption('snowflake', 'Snowflake')
-				.setValue(this.plugin.settings.uidGenerator)
-				.onChange(async (value: 'uuid' | 'nanoid' | 'ulid' | 'snowflake') => {
-					this.plugin.settings.uidGenerator = value;
-					await this.plugin.saveSettings();
-					this.display();
-				}));
-
-		if (this.plugin.settings.uidGenerator === 'nanoid') {
-			new Setting(containerEl)
-				.setName('NanoID length')
-				.setDesc('Length of the generated ID (excluding separators). Min 4, max 128.')
-				.addText(text => text
-					.setValue(String(this.plugin.settings.nanoidLength))
-					.onChange(async (value) => {
-						const num = parseInt(value);
-						if (!isNaN(num) && num >= 4 && num <= 128) {
-							this.plugin.settings.nanoidLength = num;
-							await this.plugin.saveSettings();
-						}
-					}));
-
-			new Setting(containerEl)
-				.setName('NanoID alphabet')
-				.setDesc('Characters used for ID generation. Must have at least 2 unique characters.')
-				.addTextArea(text => text
-					.setValue(this.plugin.settings.nanoidAlphabet)
-					.onChange(async (value) => {
-						const unique = new Set(value);
-						if (unique.size >= 2) {
-							this.plugin.settings.nanoidAlphabet = value;
-							await this.plugin.saveSettings();
-						}
-					}));
-
-			// --- NanoID Separator Groups ---
-			containerEl.createEl('h3', { text: 'NanoID Separator Groups' });
-			containerEl.createEl('p', { text: 'Define characters to inject into the NanoID at specific positions. Position is calculated from the raw Base ID.' }).addClass('setting-item-description');
-
-			this.plugin.settings.nanoidSeparators.forEach((separator, index) => {
-				const groupContainer = containerEl.createEl('div', { cls: 'uid-separator-group-container' });
-
-				new Setting(groupContainer)
-					.setName(`Separator Group ${index + 1}`)
-					.setHeading()
-					.addButton(button => button
-						.setButtonText('Remove')
-						.setWarning()
-						.setTooltip('Remove this separator group')
-						.onClick(async () => {
-							this.plugin.settings.nanoidSeparators.splice(index, 1);
-							await this.plugin.saveSettings();
-							this.display();
-						}));
-
-				new Setting(groupContainer)
-					.setName('Inject character')
-					.setDesc('Single character to inject (e.g., "-").')
-					.addText(text => text
-						.setValue(separator.char)
-						.onChange(async (value) => {
-							const char = value.slice(0, 1);
-							this.plugin.settings.nanoidSeparators[index].char = char;
-							await this.plugin.saveSettings();
-						}));
-
-				new Setting(groupContainer)
-					.setName(`Injection position`)
-					.setDesc('Index to inject the character. Negative numbers count from the end.')
-					.addText(text => text
-						.setValue(String(separator.position))
-						.onChange(async (value) => {
-							const num = parseInt(value);
-							if (!isNaN(num)) {
-								this.plugin.settings.nanoidSeparators[index].position = num;
-								await this.plugin.saveSettings();
-							}
-						}));
-			});
-
-			new Setting(containerEl)
-				.setName('Add new separator group')
-				.setDesc('Adds a new group for injecting a character at a specific position.')
-				.addButton(button => button
-					.setButtonText('Add Group')
-					.setCta()
-					.onClick(async () => {
-						this.plugin.settings.nanoidSeparators.push({ char: '-', position: -2 });
-						await this.plugin.saveSettings();
-						this.display();
-					}));
-		}
-
-		if (this.plugin.settings.uidGenerator === 'snowflake') {
-			new Setting(containerEl).setName('Snowflake settings').setHeading();
-
-			// Refresh the cached machine value before rendering, so the field
-			// below shows the real detected value (not the lingering 0 from
-			// before the user picked Snowflake from the dropdown).
-			const next = resolveAutoDetectedNodeId(this.plugin.settings.snowflakeNodeId);
-			if (next !== null) {
-				this.plugin.settings.snowflakeNodeId = next;
-				// Fire-and-forget: display() is sync; the in-memory mutation
-				// takes effect immediately, the next save flushes to disk.
-				this.plugin.saveSettings();
-			}
-
-			const machineId = this.plugin.settings.snowflakeNodeId;
-			const override = this.plugin.settings.snowflakeNodeIdOverride;
-			const overrideActive = override !== null;
-			const detectedNow = detectNodeId();
-
-			const machineDesc = (detectedNow !== null
-				? 'Auto-detected from this machine\'s MAC address.'
-				: 'No MAC address available (mobile or restricted environment); using a random persistent value.')
-				+ (overrideActive
-					? ' A Custom Node ID is set below — the machine value is currently NOT used.'
-					: ' This is the value used for generated UIDs.');
-
-			new Setting(containerEl)
-				.setName('Machine Node ID')
-				.setDesc(machineDesc)
-				.addText(text => {
-					text.setValue(String(machineId));
-					text.setDisabled(true);
-				});
-
-			const overrideDesc = overrideActive
-				? `Override active — generated UIDs use ${override} instead of the Machine Node ID above. Clear this field to fall back to the machine value.`
-				: 'Optional. If set, overrides the Machine Node ID for generated UIDs. Leave empty to use the machine value. Range: 0–1023.';
-
-			new Setting(containerEl)
-				.setName('Custom Node ID')
-				.setDesc(overrideDesc)
-				.addText(text => {
-					text.setPlaceholder('(none)');
-					text.setValue(override === null ? '' : String(override));
-					text.onChange(async (value) => {
-						const trimmed = value.trim();
-						if (trimmed === '') {
-							if (this.plugin.settings.snowflakeNodeIdOverride !== null) {
-								this.plugin.settings.snowflakeNodeIdOverride = null;
-								await this.plugin.saveSettings();
-								this.display();
-							}
-							return;
-						}
-						const num = parseInt(trimmed, 10);
-						if (!isNaN(num) && num >= 0 && num <= 1023) {
-							if (this.plugin.settings.snowflakeNodeIdOverride !== num) {
-								this.plugin.settings.snowflakeNodeIdOverride = num;
-								await this.plugin.saveSettings();
-								this.display();
-							}
-						}
-					});
-				});
-
-		}
-
-		// --- Automatic UID Generation ---
-		new Setting(containerEl)
-			.setName('Automatic uid generation')
-			.setDesc(`Automatically add a ${this.plugin.settings.uidKey} to notes when they are created or opened, if they don't already have one.`)
-			.setHeading();
-
-		new Setting(containerEl)
-			.setName('Enable automatic uid generation')
-			.addToggle(toggle => toggle
-				.setValue(this.plugin.settings.autoGenerateUid)
-				.onChange(async (value) => {
-					this.plugin.settings.autoGenerateUid = value;
-					await this.plugin.saveSettings();
-					this.display(); // Re-render to show/hide dependent settings
-				}));
-
-		// Only display scope/exclusion settings if auto-generation is enabled
-		if (this.plugin.settings.autoGenerateUid) {
-			new Setting(containerEl)
-				.setName('Generation scope')
-				.addDropdown(dropdown => dropdown
-					.addOption('vault', 'Entire Vault')
-					.addOption('folder', 'Specific Folder(s)')
-					.setValue(this.plugin.settings.autoGenerationScope)
-					.onChange(async (value: 'vault' | 'folder') => {
-						this.plugin.settings.autoGenerationScope = value;
-						await this.plugin.saveSettings();
-						this.display();
-					}));
-
-			// Display folder management only if scope is 'folder'
-			if (this.plugin.settings.autoGenerationScope === 'folder') {
-				new Setting(containerEl)
-					.setName('Target folders for auto-generation')
-					.setDesc('Generate uids only for notes in these folders (and subfolders).')
-					.addButton(button => button
-						.setButtonText('Manage folders')
-						.onClick(() => {
-							new FolderSelectionModal(this.app, this.plugin, () => this.display()).open();
-						}));
-
-				const folderListEl = containerEl.createEl('ul', { cls: 'uid-exclusion-list' });
-				if (this.plugin.settings.autoGenerationFolders.length > 0) {
-					const sortedFolders = [...this.plugin.settings.autoGenerationFolders].sort();
-					sortedFolders.forEach(folderPath => {
-						folderListEl.createEl('li', { text: folderPath });
-					});
-				} else {
-					folderListEl.createEl('li', { text: 'No target folders specified. Auto-generation is effectively disabled for folder scope.' });
-				}
-			}
-
-			// --- Excluded Folders Setting with Modal Button ---
-			new Setting(containerEl)
-				.setName('Excluded folders')
-				.setDesc('Folders excluded from automatic uid generation. Click button to manage.')
-				.addButton(button => button
-					.setButtonText('Manage exclusions')
-					.onClick(() => {
-						new FolderExclusionModal(this.app, this.plugin, () => this.display()).open();
-					}));
-
-			const exclusionListEl = containerEl.createEl('ul', { cls: 'uid-exclusion-list' });
-			if (this.plugin.settings.autoGenerationExclusions.length > 0) {
-				const sortedExclusions = [...this.plugin.settings.autoGenerationExclusions].sort();
-				sortedExclusions.forEach(folderPath => {
-					exclusionListEl.createEl('li', { text: folderPath });
-				});
-			} else {
-				exclusionListEl.createEl('li', { text: 'No folders excluded.' });
-			}
-
-		}
-		new Setting(containerEl)
-			.setName(`Generate missing ${this.plugin.settings.uidKey}s now`)
-			.setDesc(`Manually scan notes based on the current 'Generation scope' and 'Excluded folders' settings above. Add a ${this.plugin.settings.uidKey} to any applicable notes that don't already have one. This may take time for large vaults.`)
-			.addButton(button => button
-				.setButtonText('Generate missing uids')
-				.setTooltip('Scan and add missing uids respecting scope/exclusions')
-				.onClick(async () => {
-					button.setDisabled(true); // Disable button during processing
-					button.setButtonText('Processing...');
-					try {
-						await this.plugin.triggerAddMissingUidsInScope();
-					} catch (e) {
-						// Catch potential errors from the trigger function itself
-						console.error('[UIDGenerator] Error triggering bulk uid generation:', e);
-						new Notice('Failed to start bulk generation. See console.', 5000);
-					} finally {
-						// Re-enable button regardless of success/failure
-						button.setDisabled(false);
-						button.setButtonText('Generate missing uids');
-					}
-				}));
-
-		// --- Copy Format Settings ---
-		new Setting(containerEl).setName('Copy format').setHeading();
-		containerEl.createEl('p', { text: 'Define the format for copied text using placeholders: {title}, {uid}, {uidKey}.' }).addClass('setting-item-description');
-
-		new Setting(containerEl)
-			.setName('Format (uid exists)')
-			.setDesc('Format string used when copying title and uid, and the uid exists.')
-			.addText(text => text
-				.setPlaceholder(DEFAULT_SETTINGS.copyFormatString)
-				.setValue(this.plugin.settings.copyFormatString)
-				.onChange(async (value) => {
-					// Use default if value is empty, otherwise use the provided value
-					this.plugin.settings.copyFormatString = value || DEFAULT_SETTINGS.copyFormatString;
-					await this.plugin.saveSettings();
-				}));
-
-		new Setting(containerEl)
-			.setName('Format (uid missing)')
-			.setDesc('Format string used when copying, but the note has no uid.')
-			.addText(text => text
-				.setPlaceholder(DEFAULT_SETTINGS.copyFormatStringMissingUid)
-				.setValue(this.plugin.settings.copyFormatStringMissingUid)
-				.onChange(async (value) => {
-					// Use default if value is empty, otherwise use the provided value
-					this.plugin.settings.copyFormatStringMissingUid = value || DEFAULT_SETTINGS.copyFormatStringMissingUid;
-					await this.plugin.saveSettings();
-				}));
-
-
-		// --- Manual uid Clearing ---
-		new Setting(containerEl).setName('Manual uid clearing').setHeading();
-		new Setting(containerEl)
-			.setName('Folder to clear uids from')
-			.setDesc('Specify the vault path to remove uids from notes within.')
-			.addText(text => {
-				new FolderSuggest(this.app, text.inputEl);
-				text.setPlaceholder('Example: folder/subfolder')
-					.setValue(this.plugin.settings.folderToClear)
-					.onChange(async (value) => {
-						this.plugin.settings.folderToClear = normalizePath(value.trim());
-						await this.plugin.saveSettings();
-					});
-			});
-
-		new Setting(containerEl)
-			.setName('Clear uids in folder')
-			.setDesc(`WARNING: This permanently removes the "${this.plugin.settings.uidKey}" metadata from notes in the specified folder/subfolders and temporarily disables auto-generation.`)
-			.addButton(button => button
-				.setButtonText('Clear uids now')
-				.setWarning()
-				.onClick(async () => {
-					const folderPath = this.plugin.settings.folderToClear;
-					const uidKey = this.plugin.settings.uidKey;
-					// Basic validation for the folder path input
-					if (!folderPath || folderPath.trim() === '') {
-						new Notice("Please specify a folder path in the 'Folder to clear uids from' setting above first.");
-						return; // Prevent proceeding without a path
-					}
-
-					// Open the confirmation modal, passing the necessary info and the confirmation callback
-					new ConfirmationModal(this.app, folderPath, uidKey, async () => {
-						// --- This code runs ONLY if the user clicks "Confirm" in the modal ---
-						let autoGenWasOn = false;
-						// 1. Check if auto-generation is enabled and disable it temporarily
-						if (this.plugin.settings.autoGenerateUid) {
-							autoGenWasOn = true;
-							this.plugin.settings.autoGenerateUid = false;
-							await this.plugin.saveSettings();
-						}
-
-						try {
-							// 2. Call the main plugin method to perform the clearing
-							await this.plugin.clearUIDsInFolder(folderPath);
-						} catch (err) {
-							// Catch potential errors during the clearing process
-							console.error('[UIDGenerator] Error during bulk uid clearing process:', err);
-							new Notice('An unexpected error occurred during uid clearing. Check console.', 5000);
-						} finally {
-							// 3. This block runs whether the clearing succeeded or failed
-							if (autoGenWasOn) {
-								// Notify the user that auto-gen was turned off
-								new Notice('Automatic uid generation was disabled. You can re-enable it in settings if desired.', 8000);
-							}
-							// 4. Re-render the settings tab display to reflect any changes
-							this.display();
-						}
-					}).open();
-				}));
+	if (
+		settings.snowflakeAutoDetectNodeId === false
+		&& settings.snowflakeNodeIdOverride === null
+		&& settings.snowflakeNodeId > 0
+	) {
+		settings.snowflakeNodeIdOverride = settings.snowflakeNodeId;
+		settings.snowflakeNodeId = 0; // re-detect on next load
 	}
+	delete settings.snowflakeAutoDetectNodeId;
+	return true;
+}
+
+/** Turns whatever was persisted on disk into current, well-formed settings. */
+export function migrateSettings(stored: Partial<UIDGeneratorSettings> | null | undefined): MigratedSettings {
+	const settings: UIDGeneratorSettings = Object.assign({}, DEFAULT_SETTINGS, stored);
+	normalizeSettings(settings);
+
+	// Both run: neither short-circuits the other.
+	const folderMigrated = migrateAutoGenerationFolder(settings);
+	const snowflakeMigrated = migrateSnowflakeAutoDetect(settings);
+
+	return { settings, needsSave: folderMigrated || snowflakeMigrated };
 }

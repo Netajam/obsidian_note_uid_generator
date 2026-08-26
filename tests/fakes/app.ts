@@ -1,31 +1,16 @@
 import { vi } from 'vitest';
 import { TFile, TFolder, MarkdownView } from 'obsidian';
-import type UIDGenerator from '../../src/main';
-import type { UIDGeneratorSettings } from '../../src/settings';
+import type { UidContext } from '../../src/uid/context';
+import { UidIndex } from '../../src/uid/storage/uidIndex';
+import { DEFAULT_SETTINGS, UIDGeneratorSettings } from '../../src/settings';
 
 export interface FileSpec {
 	path: string;
 	extension?: string;
 	frontmatter?: Record<string, unknown>;
+	/** Creation time, which is what duplicate groups are ordered by. */
+	ctime?: number;
 }
-
-const DEFAULT_SETTINGS: UIDGeneratorSettings = {
-	uidKey: 'uid',
-	autoGenerateUid: false,
-	uidGenerator: 'uuid',
-	nanoidLength: 21,
-	nanoidAlphabet: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz',
-	nanoidSeparators: [],
-	snowflakeNodeId: 0,
-	snowflakeNodeIdOverride: null,
-	autoGenerationScope: 'vault',
-	autoGenerationFolder: '',
-	autoGenerationFolders: [],
-	autoGenerationExclusions: [],
-	folderToClear: '',
-	copyFormatString: '{title} - {uidKey}: {uid}',
-	copyFormatStringMissingUid: '{title} - No {uidKey}',
-};
 
 function buildTFile(spec: FileSpec, parent: TFolder | null): TFile {
 	const file = new TFile();
@@ -36,6 +21,7 @@ function buildTFile(spec: FileSpec, parent: TFolder | null): TFile {
 	const ext = '.' + file.extension;
 	file.basename = file.extension && name.endsWith(ext) ? name.slice(0, -ext.length) : name;
 	file.parent = parent;
+	file.stat = { ctime: spec.ctime ?? 0, mtime: 0, size: 0 };
 	return file;
 }
 
@@ -71,10 +57,11 @@ function buildFolderTree(files: TFile[]): Map<string, TFolder> {
 }
 
 export interface FakeApp {
-	plugin: UIDGenerator;
+	plugin: UidContext;
 	settings: UIDGeneratorSettings;
 	files: TFile[];
 	folders: Map<string, TFolder>;
+	uidIndex: UidIndex;
 	frontmatterByPath: Map<string, Record<string, unknown>>;
 	processFrontMatter: ReturnType<typeof vi.fn>;
 	clipboardWrites: string[];
@@ -85,12 +72,12 @@ export interface FakeApp {
 export function makeFakeApp(opts: {
 	files: FileSpec[];
 	settings?: Partial<UIDGeneratorSettings>;
-	uidCache?: Set<string>;
-	uidPathMap?: Map<string, string>;
+	/** Path → uid, pre-loaded into the index for tests about what it already knew. */
+	indexed?: Record<string, string>;
 }): FakeApp {
 	const settings: UIDGeneratorSettings = { ...DEFAULT_SETTINGS, ...opts.settings };
-	const uidCache = opts.uidCache ?? new Set<string>();
-	const uidPathMap = opts.uidPathMap ?? new Map<string, string>();
+	const uidIndex = new UidIndex();
+	for (const [path, uid] of Object.entries(opts.indexed ?? {})) uidIndex.set(path, uid);
 
 	const fmByPath = new Map<string, Record<string, unknown>>();
 	for (const spec of opts.files) {
@@ -118,8 +105,7 @@ export function makeFakeApp(opts: {
 
 	const plugin = {
 		settings,
-		uidCache,
-		uidPathMap,
+		uidIndex,
 		app: {
 			workspace: {
 				getActiveViewOfType: (_view: unknown) => (activeFile ? activeView : null),
@@ -140,13 +126,14 @@ export function makeFakeApp(opts: {
 				processFrontMatter,
 			},
 		},
-	} as unknown as UIDGenerator;
+	} as unknown as UidContext;
 
 	return {
 		plugin,
 		settings,
 		files: tFiles,
 		folders,
+		uidIndex,
 		frontmatterByPath: fmByPath,
 		processFrontMatter,
 		clipboardWrites,

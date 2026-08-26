@@ -11,7 +11,11 @@ The UID Generator plugin for Obsidian provides tools to create and manage unique
     *   **NanoID** — Customizable length, alphabet, and optional separator characters injected at specific positions.
     *   **ULID** — 26-character, lexicographically sortable identifier that encodes creation time (useful for chronological ordering).
     *   **Snowflake** — 64-bit time-sortable numeric ID (41-bit Unix timestamp + 10-bit node ID + 12-bit per-ms sequence). Node ID is auto-derived from the machine's MAC address on desktop and falls back to a random persistent value on mobile; both can be overridden manually.
-*   **Duplicate Detection:** An in-memory cache of existing UIDs ensures newly generated IDs are unique, with automatic retry on collision.
+*   **Collision Avoidance:** An in-memory index of every UID in the vault ensures newly *generated* IDs are unique, with automatic retry on collision.
+*   **Duplicate Detection:** Catches UIDs that were never generated here — a note copied, synced in, or made from a template arrives carrying somebody else's UID, which collision avoidance cannot see.
+    *   **On new notes:** When a note is created carrying a UID another note already has, the plugin can show a notice or generate a fresh UID for the newcomer (never for the note it came from). Configurable, including off.
+    *   **Vault-wide scan:** Lists every UID more than one note carries — from the ribbon, the command palette, or a settings button. For each note you can either keep its UID (the rest of the group gets fresh ones) or give just that one a fresh UID.
+    *   **Type-agnostic:** The scan groups notes by the raw value under your configured UID key, so UUIDs, NanoIDs, ULIDs and Snowflakes are all compared together — switching generator algorithms never hides a duplicate.
 *   **Generate/Update UID:** Manually generate a new UID for the current note, optionally overwriting any existing UID under the configured key.
 *   **Create UID If Missing:** Manually generate a UID for the current note *only* if one doesn't already exist.
 *   **Remove UID:** Manually remove the UID from the current note's frontmatter.
@@ -52,11 +56,14 @@ The plugin provides the following commands accessible from the command palette (
 *   **`UID Generator: Copy [YourKeyName] of current note`:** Copies the UID value to the clipboard. (Only available if the current note has a UID).
 *   **`UID Generator: Copy title + [YourKeyName]`:** Copies the current note's title and UID using the configured format. (Always available if a note is open).
 *   **`UID Generator: Copy titles+[YourKeyName]s for selected files`:** Copies the titles and UIDs for all *Markdown* files currently selected in the file explorer, using the configured format. (Only available when the file explorer is active and has Markdown files selected).
+*   **`UID Generator: Scan for duplicate [YourKeyName]s`:** Reads every note in the vault and opens a report of the UIDs more than one note carries. Reports a notice instead when there are none.
 
-### Ribbon Icon
+### Ribbon Icons
 
-*   A ribbon icon (looks like a scan/search symbol) is added to the left sidebar.
-*   Clicking this icon performs the **`Create [YourKeyName] if missing`** action on the currently active note.
+Two ribbon icons are added to the left sidebar:
+
+*   **Fingerprint:** performs the **`Create [YourKeyName] if missing`** action on the currently active note.
+*   **Magnifier:** runs **`Scan for duplicate [YourKeyName]s`** over the whole vault.
 
 ### Context Menus
 
@@ -83,6 +90,12 @@ Access the plugin settings from Obsidian Settings -> Community Plugins -> UID Ge
     *   **Generation Scope:** Choose `Entire Vault` or `Specific Folder(s)`.
     *   **Target Folders for Auto-Generation:** (Visible if Scope is 'Specific Folder(s)') Click "Manage folders" to open a modal where you can search, add, or remove folders that should be in scope for auto-generation. Notes in any of the listed folders (including subfolders) are eligible. Settings created with previous versions of the plugin are migrated automatically.
     *   **Excluded Folders:** Click "Manage Exclusions" to open a modal where you can search, add, or remove folders that should be ignored by automatic generation. The current list is displayed below the button.
+*   **Duplicate UIDs:**
+    *   **On a new note arriving with a duplicate UID:** `Do nothing`, `Show a notice` (default), or `Generate a fresh UID`. Only ever applies to notes as they are created — an existing note you merely edit is never rewritten, so the note a copy was taken from keeps its UID.
+    *   **Scan the vault for duplicate UIDs:** Reads every note and opens a report of the UIDs more than one note carries. Also available from the ribbon and the command palette. Each group lists its notes oldest first, and each note offers two ways out:
+        *   **Keep this one** — this note keeps the UID; every other note in the group gets a fresh one. Best when you know which note is the original.
+        *   **New UID for this one** — only this note gets a fresh UID; the rest of the group is left alone. Best when you know which note is the copy, or when resolving a large group one note at a time.
+        *   **Keep the oldest in each** resolves every group at once, keeping the oldest note in each.
 *   **Copy Format:**
     *   **Format (UID exists):** Define the template for copied text when a UID is present. Use placeholders `{title}`, `{uid}`, `{uidKey}`. (Default: `{title} - {uidKey}: {uid}`)
     *   **Format (UID missing):** Define the template for copied text when a UID is missing. Use placeholders `{title}`, `{uidKey}`. (Default: `{title} - No {uidKey}`)
@@ -100,6 +113,7 @@ Access the plugin settings from Obsidian Settings -> Community Plugins -> UID Ge
 *   **Auto-Assign IDs to New Notes in Inbox:** Enable Automatic Generation, set Scope to 'Specific Folder(s)', click "Manage folders" and add `Inbox` (and any other target folders).
 *   **Clean Up Old IDs:** Set 'Folder to clear UIDs from' to `Archives/Old Project`, click 'Clear UIDs Now', confirm.
 *   **Get List of Project Notes with IDs:** Right-click the `Projects/Current Project` folder, select `Copy titles+uids from "Current Project"`.
+*   **Clean Up After Copying Notes:** Click the magnifier in the ribbon (or run `Scan for duplicate uids`). For each group, either 'Keep this one' on the original or 'New uid for this one' on the copy — or 'Keep the oldest in each' to resolve every group at once.
 
 ## Development
 
@@ -118,16 +132,18 @@ For developers interested in contributing:
 
 ### Code Structure
 
-*   `src/main.ts`: Main plugin class (`UIDGenerator`), `onload`, `onunload`, registration logic.
-*   `src/settings.ts`: Settings interface (`UIDGeneratorSettings`), defaults (`DEFAULT_SETTINGS`), and the settings tab UI class (`UIDSettingTab`).
-*   `src/commands.ts`: Contains handler functions for commands, context menu actions, and event listeners.
-*   `src/uidUtils.ts`: Core utility functions for generating, getting, setting, removing, and formatting UIDs.
-*   `src/ui/`: Contains UI component classes:
-    *   `FolderSuggest.ts`
-    *   `ConfirmationModal.ts`
-    *   `FolderExclusionModal.ts`
-    *   `FolderSelectionModal.ts`
-*   `src/obsidian.d.ts`: Contains TypeScript declarations for undocumented Obsidian APIs used (like `files-menu`).
+The code splits in two: `src/uid` is the domain (what a uid is and what can be done to one), `src/plugin` is the Obsidian-facing surface (commands, settings, events). Each folder is entered through one file — its "door" — and the split is checked in CI by `npm run arch`.
+
+*   `src/main.ts`: The Obsidian entry point (`UIDGenerator`, `onload`), which does nothing but start the plugin.
+*   `src/plugin/`: `register.ts` wires every surface into Obsidian; `state.ts` adapts Obsidian's persistence to the domain's port.
+*   `src/plugin/commands/`: Command, ribbon and context-menu handlers, registered by `commands/register.ts`.
+*   `src/plugin/settings/`: `SettingsTab.ts` plus one folder per settings feature — `generator/`, `autoGeneration/`, `clearing/` — each owning the widgets and vault pass it uses.
+*   `src/plugin/duplicates/`: The duplicate scan, its report modal and its settings section. It sits beside `commands/` and `settings/` because it is both, and `plugin/register.ts` wires it into each.
+*   `src/settings.ts`: The persisted settings shape, its defaults, and the migration of whatever an older version wrote.
+*   `src/uid/`: `context.ts` (what the domain needs from its host), `noteUid.ts` (read/ensure/renew/clear one note's uid), `bulk.ts` (vault-wide passes), `duplicates.ts` (notes sharing a uid), `scope.ts`, `folderNotes.ts`.
+*   `src/uid/generators/`: `generate.ts` (unique ids, retrying past collisions) over the UUID, NanoID, ULID and Snowflake modules.
+*   `src/uid/storage/`: Frontmatter read/write, the `UidIndex` of which notes carry which uid, and the vault sync that keeps it current.
+*   `src/plugin/obsidian.d.ts`: TypeScript declarations for undocumented Obsidian APIs used (like `files-menu`).
 
 ## Contributing
 

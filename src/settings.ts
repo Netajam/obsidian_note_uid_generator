@@ -52,11 +52,24 @@ export interface MigratedSettings {
 	needsSave: boolean;
 }
 
+/**
+ * A copy of the list, or an empty one when an older version stored something
+ * that is not a list at all.
+ *
+ * The copy is the point: `Object.assign` below shares whichever list instance
+ * it took, so without this a migration that appends a folder would append it
+ * to `DEFAULT_SETTINGS` itself, and every later load would start from the
+ * previous user's data.
+ */
+function toOwnList<T>(value: T[]): T[] {
+	return Array.isArray(value) ? [...value] : [];
+}
+
 /** Fills in defaults and repairs fields an older version may have stored with the wrong type. */
 function normalizeSettings(settings: UIDGeneratorSettings): void {
-	if (!Array.isArray(settings.autoGenerationExclusions)) settings.autoGenerationExclusions = [];
-	if (!Array.isArray(settings.nanoidSeparators)) settings.nanoidSeparators = [];
-	if (!Array.isArray(settings.autoGenerationFolders)) settings.autoGenerationFolders = [];
+	settings.autoGenerationExclusions = toOwnList(settings.autoGenerationExclusions);
+	settings.nanoidSeparators = toOwnList(settings.nanoidSeparators).map(separator => ({ ...separator }));
+	settings.autoGenerationFolders = toOwnList(settings.autoGenerationFolders);
 	settings.copyFormatString = settings.copyFormatString || DEFAULT_SETTINGS.copyFormatString;
 	settings.copyFormatStringMissingUid = settings.copyFormatStringMissingUid || DEFAULT_SETTINGS.copyFormatStringMissingUid;
 }

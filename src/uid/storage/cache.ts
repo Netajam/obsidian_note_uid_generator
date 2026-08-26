@@ -1,5 +1,5 @@
-import { TFile } from 'obsidian';
-import type { UidStore } from '../model/context';
+import { TAbstractFile } from 'obsidian';
+import type { UidStore } from '../context';
 import { getUIDFromFile } from './frontmatter';
 
 /**
@@ -25,9 +25,12 @@ export function buildUidCache(ctx: UidStore): void {
  * Reconciles one file's cache entry with its current frontmatter — for files
  * created or synced in with a uid already set, and for frontmatter edited by
  * the user or another plugin.
+ *
+ * Takes whatever the vault event carried: a vault entry that is not a note has
+ * no uid to read and none cached, so it falls out at the first comparison.
  */
-export function syncUidFromFrontmatter(ctx: UidStore, file: TFile): void {
-	const oldUid = ctx.uidPathMap.get(file.path);
+export function syncUidFromFrontmatter(ctx: UidStore, file: TAbstractFile): void {
+	const oldUid = ctx.uidPathMap.get(file.path) ?? null;
 	const newUid = getUIDFromFile(ctx, file);
 	if (oldUid === newUid) return;
 

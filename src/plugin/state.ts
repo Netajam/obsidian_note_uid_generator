@@ -1,8 +1,7 @@
 import { Plugin } from 'obsidian';
-import { refreshMachineNodeId } from '../uid/generate';
-import type { UidContext } from '../uid/model/context';
-import { migrateSettings } from '../uid/model/migrations';
-import type { UIDGeneratorSettings } from '../uid/model/settings';
+import { refreshMachineNodeId } from '../uid/generators/generate';
+import type { UidContext } from '../uid/context';
+import { migrateSettings, type UIDGeneratorSettings } from '../uid/settings';
 
 /**
  * The adapter that satisfies the uid domain's `UidContext` port using

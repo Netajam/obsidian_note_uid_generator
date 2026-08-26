@@ -1,6 +1,6 @@
-import { Notice, TFile } from 'obsidian';
-import type { UidStore } from '../model/context';
-import { isMarkdownNote } from '../model/note';
+import { Notice, TAbstractFile, TFile } from 'obsidian';
+import type { UidStore } from '../context';
+import { isMarkdownNote } from './note';
 
 const ERROR_NOTICE_MS = 5000;
 
@@ -9,10 +9,15 @@ const ALTERNATE_UID_KEYS = ['uid', 'Uid', 'UID'];
 
 /**
  * Retrieves the UID for a given file, respecting the custom key setting.
+ *
+ * Takes any vault entry and answers null for the ones that are not notes, so
+ * that a caller holding whatever a vault event handed it — the uid cache, say
+ * — asks the same question as one holding a note.
+ *
  * Returns null if the file has no frontmatter, no uid, or could not be read.
  */
-export function getUIDFromFile(ctx: UidStore, file: TFile | null): string | null {
-	if (!file) return null;
+export function getUIDFromFile(ctx: UidStore, file: TAbstractFile | null): string | null {
+	if (!isMarkdownNote(file)) return null;
 	try {
 		const frontmatter = ctx.app.metadataCache.getFileCache(file)?.frontmatter;
 		if (!frontmatter) return null;

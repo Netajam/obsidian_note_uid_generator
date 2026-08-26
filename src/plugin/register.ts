@@ -1,7 +1,6 @@
 import { Plugin } from 'obsidian';
 import { buildUidCache, forgetFile, syncUidFromFrontmatter } from '../uid/storage/cache';
-import type { UidContext } from '../uid/model/context';
-import { isMarkdownNote } from '../uid/model/note';
+import type { UidContext } from '../uid/context';
 import { loadUidState } from './state';
 import { registerUidCommands } from './commands/register';
 import { UIDSettingTab } from './settings/SettingsTab';
@@ -20,19 +19,14 @@ function registerCacheMaintenance(host: Plugin, ctx: UidContext): void {
 	host.app.workspace.onLayoutReady(() => {
 		buildUidCache(ctx);
 
-		// Files dropped or synced in may already carry a uid.
-		host.registerEvent(host.app.vault.on('create', (file) => {
-			if (isMarkdownNote(file)) syncUidFromFrontmatter(ctx, file);
-		}));
-
-		host.registerEvent(host.app.vault.on('delete', (file) => {
-			if (isMarkdownNote(file)) forgetFile(ctx, file.path);
-		}));
+		// Files dropped or synced in may already carry a uid. Which vault
+		// entries are notes is the cache's own rule, so these forward the
+		// event and nothing more.
+		host.registerEvent(host.app.vault.on('create', (file) => syncUidFromFrontmatter(ctx, file)));
+		host.registerEvent(host.app.vault.on('delete', (file) => forgetFile(ctx, file.path)));
 
 		// Frontmatter edited by the user or another plugin.
-		host.registerEvent(host.app.metadataCache.on('changed', (file) => {
-			if (isMarkdownNote(file)) syncUidFromFrontmatter(ctx, file);
-		}));
+		host.registerEvent(host.app.metadataCache.on('changed', (file) => syncUidFromFrontmatter(ctx, file)));
 	});
 }
 

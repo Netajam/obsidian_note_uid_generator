@@ -1,6 +1,4 @@
 [
-  "one-door:src/plugin/settings/ui",
   "one-door:src/uid",
-  "one-door:src/uid/model",
   "one-door:src/uid/storage"
 ]

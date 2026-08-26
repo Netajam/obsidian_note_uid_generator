@@ -11,7 +11,7 @@ import { handleCreateUidIfMissing, handleGenerateUpdateUid, handleRemoveUid } fr
 import { activeNote } from './target';
 import { addMissingUidsInScope, clearUIDsInFolder } from '../../uid/bulk';
 import { installFakeClipboard, makeFakeApp } from '../../../tests/fakes/app';
-import type { UIDGeneratorSettings } from '../../uid/model/settings';
+import type { UIDGeneratorSettings } from '../../uid/settings';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -640,7 +640,7 @@ describe('handleGenerateUpdateUid — overwrites the active file uid', () => {
 		});
 		app.setActiveFile(app.files[0]);
 
-		await handleGenerateUpdateUid(app.plugin, activeNote(app.plugin.app), true);
+		await handleGenerateUpdateUid(app.plugin, activeNote(app.plugin.app));
 
 		const fm = app.frontmatterByPath.get('note.md') ?? {};
 		expect(fm.uid).toMatch(UUID_RE);
@@ -651,7 +651,7 @@ describe('handleGenerateUpdateUid — overwrites the active file uid', () => {
 		const app = makeFakeApp({ files: [{ path: 'note.md' }] });
 		app.setActiveFile(app.files[0]);
 
-		await handleGenerateUpdateUid(app.plugin, activeNote(app.plugin.app), true);
+		await handleGenerateUpdateUid(app.plugin, activeNote(app.plugin.app));
 
 		expect(app.frontmatterByPath.get('note.md')?.uid).toMatch(UUID_RE);
 	});
@@ -660,7 +660,7 @@ describe('handleGenerateUpdateUid — overwrites the active file uid', () => {
 		const app = makeFakeApp({ files: [{ path: 'note.md' }] });
 		// active file deliberately not set
 
-		await handleGenerateUpdateUid(app.plugin, activeNote(app.plugin.app), true);
+		await handleGenerateUpdateUid(app.plugin, activeNote(app.plugin.app));
 
 		expect(app.processFrontMatter).not.toHaveBeenCalled();
 		expect(app.frontmatterByPath.get('note.md')?.uid).toBeUndefined();

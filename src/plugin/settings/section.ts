@@ -1,4 +1,4 @@
-import type { UidContext } from '../../uid/model/context';
+import type { UidContext } from '../../uid/context';
 
 /**
  * What each section of the settings tab is handed: where to draw, what to

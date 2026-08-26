@@ -1,9 +1,9 @@
 import { Plugin, PluginSettingTab } from 'obsidian';
-import type { UidContext } from '../../uid/model/context';
-import { renderAutoGenerationSection } from './autoGenerationSection';
-import { renderClearingSection } from './clearingSection';
+import type { UidContext } from '../../uid/context';
+import { renderAutoGenerationSection } from './autoGeneration/autoGenerationSection';
+import { renderClearingSection } from './clearing/clearingSection';
 import { renderCopyFormatSection } from './copyFormatSection';
-import { renderGeneratorSection } from './generatorSection';
+import { renderGeneratorSection } from './generator/generatorSection';
 import type { SettingsSection } from './section';
 
 /**

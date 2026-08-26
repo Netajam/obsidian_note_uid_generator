@@ -1,15 +1,16 @@
-import { FileExplorerView, Notice, TFile, TFolder, WorkspaceLeaf } from 'obsidian';
-import type { UidContext } from '../../uid/model/context';
-import { isMarkdownNote } from '../../uid/model/note';
+import { Notice, TFile, TFolder } from 'obsidian';
+import type { UidContext } from '../../uid/context';
 import { getMarkdownFilesInFolder } from '../../uid/folderNotes';
-import { getUIDFromFile } from '../../uid/storage/frontmatter';
+import { uidOf } from '../../uid/noteUid/noteUid';
+import type { ExplorerSelection } from './target';
 
 /**
  * Everything that puts uids on the clipboard, from a single note up to a whole
  * folder — and the templates that shape them, which exist only to serve this.
  *
- * A leaf: it reaches into the uid domain but depends on no sibling, so the
- * whole folder's coupling to `src/uid` is readable from the imports above.
+ * It formats and copies; which notes it is handed is `target.ts`'s answer, and
+ * how a note's uid is stored is the uid domain's. What is left here is the one
+ * job the file is named for.
  */
 
 const CLIPBOARD_ERROR_MS = 5000;
@@ -27,7 +28,7 @@ export function formatCopyString(ctx: UidContext, formatString: string, title: s
 
 /** Renders one file with whichever copy-format template matches its uid state. */
 function formatFile(ctx: UidContext, file: TFile): string {
-	const uid = getUIDFromFile(ctx, file);
+	const uid = uidOf(ctx, file);
 	const template = uid ? ctx.settings.copyFormatString : ctx.settings.copyFormatStringMissingUid;
 	return formatCopyString(ctx, template, file.basename, uid);
 }
@@ -54,7 +55,7 @@ export async function handleCopyUid(ctx: UidContext, file: TFile | null): Promis
 		return;
 	}
 
-	const uid = getUIDFromFile(ctx, file);
+	const uid = uidOf(ctx, file);
 	if (!uid) {
 		new Notice(`No ${ctx.settings.uidKey} found to copy.`);
 		return;
@@ -102,52 +103,24 @@ export async function handleCopyTitlesAndUidsForMultipleFiles(ctx: UidContext, f
 	);
 }
 
-/** The file explorer leaf whose selection the command palette should act on. */
-function findFileExplorerLeaf(ctx: UidContext): WorkspaceLeaf | null {
-	const leaves = ctx.app.workspace.getLeavesOfType('file-explorer');
-	if (leaves.length === 0) return null;
-
-	const active = ctx.app.workspace.activeLeaf;
-	return active && active.view.getViewType() === 'file-explorer' ? active : leaves[0];
-}
-
 /**
- * Whether the "copy selection" command should be offered: the file explorer is
- * the focused leaf and has at least one note selected. Stricter than
- * `findFileExplorerLeaf`, which is why it lives beside it rather than in the door.
+ * Command palette: copy title + uid for the files selected in the file
+ * explorer. The selection is resolved by `target.ts` and handed over, so this
+ * file stays a leaf — it reports what it was given and copies it.
  */
-export function canCopySelection(ctx: UidContext): boolean {
-	const leaf = ctx.app.workspace.getLeavesOfType('file-explorer')
-		?.find(candidate => candidate.view.getViewType() === 'file-explorer'
-			&& ctx.app.workspace.activeLeaf === candidate);
-	if (!leaf) return false;
-
-	const selectedPaths = (leaf.view as FileExplorerView).selectedFiles ?? [];
-	return selectedPaths.some(path => isMarkdownNote(ctx.app.vault.getAbstractFileByPath(path)));
-}
-
-/** Command palette: copy title + uid for the files selected in the file explorer. */
-export async function handleCopyTitlesAndUidsForSelection(ctx: UidContext): Promise<void> {
-	const leaf = findFileExplorerLeaf(ctx);
-	if (!leaf) {
+export async function handleCopyTitlesAndUidsForSelection(ctx: UidContext, selection: ExplorerSelection | null): Promise<void> {
+	if (!selection) {
 		new Notice('No active file explorer found.');
 		return;
 	}
-
-	const view = leaf.view as FileExplorerView;
-	if (!view || !view.selectedFiles || view.selectedFiles.length === 0) {
+	if (selection.size === 0) {
 		new Notice('No files selected in the file explorer.');
 		return;
 	}
-
-	const files = view.selectedFiles
-		.map(path => ctx.app.vault.getAbstractFileByPath(path))
-		.filter(isMarkdownNote);
-
-	if (files.length === 0) {
+	if (selection.notes.length === 0) {
 		new Notice('No *Markdown* files selected.');
 		return;
 	}
 
-	await handleCopyTitlesAndUidsForMultipleFiles(ctx, files);
+	await handleCopyTitlesAndUidsForMultipleFiles(ctx, selection.notes);
 }

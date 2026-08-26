@@ -1,7 +1,6 @@
 import { Notice, TFile, TFolder, normalizePath } from 'obsidian';
-import type { UidStore } from './model/context';
-import { ensureUid } from './assign';
-import { removeUID } from './storage/frontmatter';
+import type { UidStore } from './context';
+import { clearUid, ensureUid } from './noteUid/noteUid';
 import { getMarkdownFilesInFolder } from './folderNotes';
 
 /** Vault-wide passes, driven from the settings tab. Both can run for a while, so both report progress. */
@@ -89,7 +88,7 @@ export async function clearUIDsInFolder(ctx: UidStore, folderPath: string): Prom
 	let errorCount = 0;
 	for (const file of files) {
 		try {
-			if (await removeUID(ctx, file)) clearedCount++;
+			if (await clearUid(ctx, file)) clearedCount++;
 		} catch {
 			errorCount++;
 		}

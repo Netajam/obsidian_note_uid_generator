@@ -1,6 +1,6 @@
 import { Notice } from 'obsidian';
-import type { UidStore } from './model/context';
-import { generateRawUID, resolveMachineNodeId } from './generators/algorithms';
+import type { UidStore } from '../context';
+import { generateRawUID, resolveMachineNodeId } from './algorithms';
 
 const MAX_COLLISION_RETRIES = 10;
 const COLLISION_NOTICE_MS = 15000;

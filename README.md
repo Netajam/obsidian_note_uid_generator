@@ -118,16 +118,16 @@ For developers interested in contributing:
 
 ### Code Structure
 
-*   `src/main.ts`: Main plugin class (`UIDGenerator`), `onload`, `onunload`, registration logic.
-*   `src/settings.ts`: Settings interface (`UIDGeneratorSettings`), defaults (`DEFAULT_SETTINGS`), and the settings tab UI class (`UIDSettingTab`).
-*   `src/commands.ts`: Contains handler functions for commands, context menu actions, and event listeners.
-*   `src/uidUtils.ts`: Core utility functions for generating, getting, setting, removing, and formatting UIDs.
-*   `src/ui/`: Contains UI component classes:
-    *   `FolderSuggest.ts`
-    *   `ConfirmationModal.ts`
-    *   `FolderExclusionModal.ts`
-    *   `FolderSelectionModal.ts`
-*   `src/obsidian.d.ts`: Contains TypeScript declarations for undocumented Obsidian APIs used (like `files-menu`).
+The code splits in two: `src/uid` is the domain (what a uid is and what can be done to one), `src/plugin` is the Obsidian-facing surface (commands, settings, events). Each folder is entered through one file — its "door" — and the split is checked in CI by `npm run arch`.
+
+*   `src/main.ts`: The Obsidian entry point (`UIDGenerator`, `onload`), which does nothing but start the plugin.
+*   `src/plugin/`: `register.ts` wires every surface into Obsidian; `state.ts` adapts Obsidian's persistence to the domain's port.
+*   `src/plugin/commands/`: Command, ribbon and context-menu handlers, registered by `commands/register.ts`.
+*   `src/plugin/settings/`: `SettingsTab.ts` plus one folder per settings feature — `generator/`, `autoGeneration/`, `clearing/` — each owning the widgets and vault pass it uses.
+*   `src/uid/`: `context.ts` (what the domain needs from its host), `settings.ts` (the persisted shape, defaults and migration), `noteUid.ts` (read/ensure/renew/clear one note's uid), `bulk.ts` (vault-wide passes), `scope.ts`, `folderNotes.ts`.
+*   `src/uid/generators/`: `generate.ts` (unique ids, retrying past collisions) over the UUID, NanoID, ULID and Snowflake modules.
+*   `src/uid/storage/`: Frontmatter read/write and the uid cache that mirrors the vault.
+*   `src/plugin/obsidian.d.ts`: TypeScript declarations for undocumented Obsidian APIs used (like `files-menu`).
 
 ## Contributing
 

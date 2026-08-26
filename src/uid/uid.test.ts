@@ -1,11 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { TFile } from 'obsidian';
 
-import { generateUID } from './generate';
+import { generateUID } from './generators/generate';
 import { getUIDFromFile, removeUID, setUID } from './storage/frontmatter';
 import { detectNodeId, resolveAutoDetectedNodeId } from './generators/nodeId';
 import { _resetSnowflakeState } from './generators/snowflake';
-import type { UidContext } from './model/context';
+import type { UidContext } from './context';
 
 type Settings = {
 	uidKey: string;

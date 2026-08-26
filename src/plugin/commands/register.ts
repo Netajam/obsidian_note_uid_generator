@@ -1,14 +1,14 @@
 import {
 	Editor, MarkdownView, Menu, Plugin, TAbstractFile, TFile, TFolder, debounce,
 } from 'obsidian';
-import type { UidContext } from '../../uid/model/context';
+import type { UidContext } from '../../uid/context';
 import { handleAutoGenerateUid } from './autoGenerate';
 import {
-	canCopySelection, handleCopyTitleUid, handleCopyTitlesAndUidsForMultipleFiles,
+	handleCopyTitleUid, handleCopyTitlesAndUidsForMultipleFiles,
 	handleCopyTitlesAndUidsForSelection, handleCopyTitlesAndUidsFromFolder, handleCopyUid,
 } from './copy';
 import { handleCreateUidIfMissing, handleGenerateUpdateUid, handleRemoveUid } from './noteUid';
-import { activeNote, asNote, notesAmong } from './target';
+import { activeNote, asNote, explorerSelection, hasSelectedNotes, notesAmong } from './target';
 
 /**
  * The head of this folder: every way a user can trigger a uid command, wired
@@ -39,7 +39,7 @@ function registerPaletteCommands(host: Plugin, ctx: UidContext): void {
 		id: 'generate-update-uid',
 		name: `Generate/update ${uidKey} (Overwrites)`,
 		editorCallback: (editor: Editor, view: MarkdownView) => {
-			handleGenerateUpdateUid(ctx, view.file, true);
+			handleGenerateUpdateUid(ctx, view.file);
 		},
 	});
 
@@ -85,8 +85,8 @@ function registerPaletteCommands(host: Plugin, ctx: UidContext): void {
 		id: 'copy-title-uid-for-selection',
 		name: `Copy titles+ ${uidKey}s for selected files`,
 		checkCallback: (checking: boolean): boolean => {
-			if (!canCopySelection(ctx)) return false;
-			if (!checking) handleCopyTitlesAndUidsForSelection(ctx);
+			if (!hasSelectedNotes(ctx.app)) return false;
+			if (!checking) handleCopyTitlesAndUidsForSelection(ctx, explorerSelection(ctx.app));
 			return true;
 		},
 	});

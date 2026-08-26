@@ -1,7 +1,7 @@
 import { vi } from 'vitest';
 import { TFile, TFolder, MarkdownView } from 'obsidian';
-import type { UidContext } from '../../src/uid/model/context';
-import { DEFAULT_SETTINGS, UIDGeneratorSettings } from '../../src/uid/model/settings';
+import type { UidContext } from '../../src/uid/context';
+import { DEFAULT_SETTINGS, UIDGeneratorSettings } from '../../src/uid/settings';
 
 export interface FileSpec {
 	path: string;

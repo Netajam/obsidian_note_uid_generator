@@ -1,8 +1,8 @@
 import { Notice, Setting, normalizePath } from 'obsidian';
-import { clearFolderUids } from './vaultPasses';
-import { ConfirmationModal } from './ui/ConfirmationModal';
-import { FolderSuggest } from './ui/FolderSuggest';
-import type { SettingsSection } from './section';
+import { clearFolderUids } from './clearUids';
+import { ConfirmationModal } from './ConfirmationModal';
+import { FolderSuggest } from './FolderSuggest';
+import type { SettingsSection } from '../section';
 
 /** Bulk removal of uids from a folder. Destructive, so it goes through a confirmation modal. */
 export function renderClearingSection(section: SettingsSection): void {

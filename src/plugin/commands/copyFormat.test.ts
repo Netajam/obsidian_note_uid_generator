@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { formatCopyString } from './copy';
-import type { UidContext } from '../../uid/model/context';
+import type { UidContext } from '../../uid/context';
 
 function makeCtx(uidKey = 'uid'): UidContext {
 	return { settings: { uidKey } } as unknown as UidContext;

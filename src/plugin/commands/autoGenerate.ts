@@ -1,6 +1,6 @@
 import { TFile } from 'obsidian';
-import type { UidContext } from '../../uid/model/context';
-import { ensureUid } from '../../uid/assign';
+import type { UidContext } from '../../uid/context';
+import { ensureUid } from '../../uid/noteUid/noteUid';
 
 /**
  * Vault event handler: gives a newly created or opened note a uid.
